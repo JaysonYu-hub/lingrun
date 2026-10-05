@@ -1,0 +1,9 @@
+{
+  "name": "rain-tree-trackcheck",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test --experimental-test-isolation=none desktop/model.test.mjs api-test/session.test.cjs api-test/workflow.test.cjs api-test/phone-runtime.test.cjs api-test/adaptive-run.test.cjs api-test/missing-detail.test.cjs api-test/phone-motion.test.cjs",
+    "test:feedback": "node --test --experimental-test-isolation=none feedback-server/server.test.mjs"
+  }
+}

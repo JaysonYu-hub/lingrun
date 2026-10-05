@@ -1,0 +1,120 @@
+package cn.trackcheck.beta;
+import android.app.*;
+import android.content.*;
+import android.content.pm.ServiceInfo;
+import android.os.*;
+import android.speech.tts.*;
+import android.media.*;
+import org.json.*;
+import java.io.*;
+import java.nio.charset.StandardCharsets;
+import java.util.*;
+import java.util.concurrent.*;
+
+/** User-started foreground service. HTTP, scheduling, policy and TTS do not depend on Activity/WebView. */
+public final class RunService extends Service {
+    private static final int NOTICE=7301;private static final String CHANNEL="trackcheck-monitor";
+    static final class Start {NativeApi.Session session;LabPlatform simulation;JSONObject report;File file;boolean gps,steps,check;}
+    private static volatile Start pending;private static volatile RunService current;private static volatile JSONObject latest;private static volatile File latestFile;private static volatile boolean visible=true;
+    private static volatile JSONArray nativeAuth=new JSONArray();
+    static JSONArray authEvidence(){try{return new JSONArray(nativeAuth.toString());}catch(Exception e){return new JSONArray();}}
+    static void clearAuthEvidence(){nativeAuth=new JSONArray();}
+    static boolean running(){return pending!=null||current!=null&&current.live;}
+    static JSONObject snapshot(){try{return latest==null?null:new JSONObject(latest.toString());}catch(Exception e){return null;}}
+    static File lastFile(){return latestFile;}
+    static void launch(Context context,Start data){if(running())throw new IllegalStateException("already running");pending=data;latest=data.report;latestFile=data.file;try{context.startForegroundService(new Intent(context,RunService.class).setAction("START"));}catch(RuntimeException e){pending=null;throw e;}}
+    static void stopRun(String reason){stopRun(reason,null);}
+    static void stopRun(String reason,Runnable after){Start preparing=pending;pending=null;if(preparing!=null){latest=preparing.report;latestFile=preparing.file;put(latest,"state","STOPPED");put(latest,"reason",reason);put(latest,"finished",stamp());put(latest,"lastMessage","已取消本轮服务启动。");write(latestFile,latest);}RunService target=current;Runnable done=()->{if(after!=null)new Handler(Looper.getMainLooper()).post(after);};if(target!=null)target.handler.post(()->{target.finish(reason,"监测已停止。");done.run();});else done.run();}
+    static void visibility(boolean v){visible=v;if(current!=null&&current.live){RunService target=current;target.handler.post(()->{if(target.live)target.event("visibility",NativeApi.object("uiVisible",v,"screenOn",target.power.isInteractive()));});}}
+    static void hearing(boolean heard){if(latest==null)return;JSONObject e=NativeApi.object("kind","最近业务提示","heard",heard,"source","USER");if(current!=null&&current.live){RunService target=current;target.handler.post(()->target.event("hearing",e));}else{latest.optJSONArray("events").put(NativeApi.object("at",stamp(),"type","hearing","data",e));write(latestFile,latest);}}
+    static void replay(){if(current!=null&&current.live&&!current.lastSpeech.isEmpty()){RunService target=current;target.handler.post(()->target.speak(target.lastSpeech,null));}}
+    static void disableMotion(){if(current!=null&&current.live){RunService target=current;target.handler.post(()->{target.motion.stop();target.event("motionDisabled",NativeApi.object("byUser",true));});}}
+    private Handler handler;private HandlerThread serviceThread;private ExecutorService executor;
+    private LabPlatform simulation;private AudioManager audio;private AudioFocusRequest focus;
+    private String speakingId;private int networkFailures;private long lastUptime;
+    private static final AudioAttributes SPEECH_AUDIO=new AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ASSISTANCE_NAVIGATION_GUIDANCE).setContentType(AudioAttributes.CONTENT_TYPE_SPEECH).build();
+    private ScreenMonitor screenMonitor;private long nextQueryDue=-1,lastHeartbeat;private Runnable scheduledQuery;
+    private NativeApi api;private MotionTracker motion;private RunPolicy policy;private JSONObject report;private File file;private volatile boolean live;private boolean check,busy,voiceReady,voiceBusy;private int generation,round,voiceId;private long started;
+    private TextToSpeech tts;private PowerManager power;private PowerManager.WakeLock wake;private String lastSpeech="",queued;private Runnable queuedDone;
+    private final HashMap<String,JSONObject> utterances=new HashMap<>();private final HashMap<String,Runnable> callbacks=new HashMap<>();
+    private static String stamp(){return new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSXXX",Locale.ROOT).format(new Date());}
+    private static void put(JSONObject o,String k,Object v){try{o.put(k,v==null?JSONObject.NULL:v);}catch(Exception ignored){}}
+    private static boolean write(File f,JSONObject data){if(f==null)return false;android.util.AtomicFile a=new android.util.AtomicFile(f);FileOutputStream out=null;try{out=a.startWrite();out.write(data.toString(2).getBytes(StandardCharsets.UTF_8));a.finishWrite(out);return true;}catch(Exception e){if(out!=null)a.failWrite(out);return false;}}
+    @Override public IBinder onBind(Intent intent){return null;}
+    @Override public void onCreate(){super.onCreate();current=this;power=(PowerManager)getSystemService(POWER_SERVICE);serviceThread=new HandlerThread("trackcheck-monitor");serviceThread.start();handler=new Handler(serviceThread.getLooper());executor=Executors.newSingleThreadExecutor();motion=new MotionTracker(this,handler.getLooper());audio=(AudioManager)getSystemService(AUDIO_SERVICE);NotificationManager manager=getSystemService(NotificationManager.class);manager.createNotificationChannel(new NotificationChannel(CHANNEL,"跑步监测服务",NotificationManager.IMPORTANCE_LOW));}
+    private Notification notification(String text){Intent open=new Intent(this,MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);PendingIntent openAction=PendingIntent.getActivity(this,0,open,PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE);PendingIntent stopAction=PendingIntent.getService(this,1,new Intent(this,RunService.class).setAction("STOP"),PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE);
+        return new Notification.Builder(this,CHANNEL).setSmallIcon(R.drawable.ic_launcher).setContentTitle("跑点助手 · 后台监测中").setContentText(text).setOngoing(true).setOnlyAlertOnce(true).setContentIntent(openAction).setVisibility(Notification.VISIBILITY_PRIVATE).addAction(new Notification.Action.Builder(null,"停止监测",stopAction).build()).build();}
+    private void notice(String text){try{getSystemService(NotificationManager.class).notify(NOTICE,notification(text));}catch(Exception ignored){}}
+    @Override public int onStartCommand(Intent intent,int flags,int startId){
+        if(intent!=null&&"STOP".equals(intent.getAction())){pending=null;requestFinish("NOTIFICATION_STOP","已从通知栏停止监测。");return START_NOT_STICKY;}
+        if(live)return START_NOT_STICKY;Start s=pending;pending=null;
+        try{int types=ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC|ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK;if(s!=null&&s.gps&&motion.locationPermission())types|=ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION;if(Build.VERSION.SDK_INT>=34&&s!=null&&s.steps&&motion.stepPermission())types|=ServiceInfo.FOREGROUND_SERVICE_TYPE_HEALTH;
+            if(Build.VERSION.SDK_INT>=29)startForeground(NOTICE,notification("正在准备查询……"),types);else startForeground(NOTICE,notification("正在准备查询……"));
+        }catch(Exception e){if(s!=null){report=s.report;file=s.file;live=true;finish("SERVICE_START_FAILED","系统未允许启动后台监测服务，请返回前台重试并导出报告。");}else stopSelf();return START_NOT_STICKY;}
+        if(s==null){stopForeground(STOP_FOREGROUND_REMOVE);stopSelf();return START_NOT_STICKY;}
+        live=true;handler.post(()->startRun(s));return START_NOT_STICKY;
+    }
+    private void startRun(Start s){
+        if(!live)return;generation++;report=s.report;file=s.file;check=s.check;started=SystemClock.elapsedRealtime();simulation=s.simulation;api=simulation!=null?null:new NativeApi(s.session,new NativeApi.Cookies(){public String get(String u){return android.webkit.CookieManager.getInstance().getCookie(u);}public void set(String u,String v){android.webkit.CookieManager.getInstance().setCookie(u,v);}});policy=new RunPolicy();round=0;networkFailures=0;busy=false;voiceReady=false;voiceBusy=false;lastSpeech="";queued=null;queuedDone=null;if(tts!=null){tts.shutdown();tts=null;}int gen=generation;
+        put(report,"schema",4);put(report,"mode",simulation!=null?"SIMULATION_BACKGROUND":check?"BACKGROUND_CHECK":"RUN_BACKGROUND");put(report,"state","RUNNING");put(report,"backgroundQueries",0);put(report,"screenOffQueries",0);put(report,"lockedQueries",0);put(report,"displayOffQueries",0);put(report,"nonInteractiveQueries",0);put(report,"screenOffResponseQueries",0);put(report,"screenOffEvents",0);put(report,"heartbeatCount",0);put(report,"transport",simulation!=null?"local-simulation":"native-http");put(report,"simulated",simulation!=null);put(report,"serviceThread","trackcheck-monitor");put(report,"limitations",new JSONArray(Arrays.asList("系统强制停止或进程回收无法保证继续","本版后台/锁屏需真机验收","后台不会自动重新登录")));
+        try {
+        screenMonitor=new ScreenMonitor(this,handler,(source,state)->{if(live){if(Intent.ACTION_SCREEN_OFF.equals(source))put(report,"screenOffEvents",report.optInt("screenOffEvents")+1);event("screen",NativeApi.object("source",source,"state",state));}});screenMonitor.start();put(report,"screen",screenMonitor.snapshot());lastHeartbeat=SystemClock.elapsedRealtime();lastUptime=SystemClock.uptimeMillis();handler.postDelayed(this::heartbeat,5000);
+        if(s.gps)motion.enableGps();if(s.steps)motion.enableSteps();wake=power.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK,"trackcheck:monitor");wake.setReferenceCounted(false);wake.acquire(7260000);
+        event("service",NativeApi.object("started",true,"ownsHttp",true,"ownsTimers",true,"dependsOnWebView",false,"checkSeconds",check?90:JSONObject.NULL));
+        tts=new TextToSpeech(getApplicationContext(),code->handler.post(()->{if(!live||gen!=generation)return;if(code!=TextToSpeech.SUCCESS||tts==null||tts.setLanguage(Locale.SIMPLIFIED_CHINESE)<0){event("voiceUnavailable",NativeApi.object("reason","INIT_FAILED"));query();return;}tts.setAudioAttributes(SPEECH_AUDIO);voiceReady=true;query();}));
+        tts.setOnUtteranceProgressListener(new UtteranceProgressListener(){public void onStart(String id){handler.post(()->{JSONObject e=utterances.get(id);if(e!=null){put(e,"started",stamp());put(e,"startContext",audioContext());put(e,"state","STARTED");save();}});}public void onDone(String id){handler.post(()->voiceEnd(id,true));}public void onError(String id){handler.post(()->voiceEnd(id,false));}});
+        handler.postDelayed(()->{if(live&&gen==generation&&!voiceReady&&round==0){event("voiceUnavailable",NativeApi.object("reason","INIT_TIMEOUT"));query();}},15000);
+        handler.postDelayed(()->{if(live&&gen==generation)finish(check?"BACKGROUND_CHECK_DONE":"LIMIT",check?"90秒后台检查结束，请核对后台与熄屏查询计数。":"达到两小时上限，已停止。");},check?90000:7200000);
+        } catch(RuntimeException e){finish("SERVICE_INIT_FAILED","后台服务初始化失败，请导出报告。");}
+    }
+    private void requestFinish(String reason,String message){handler.post(()->finish(reason,message));}
+    private void heartbeat(){if(!live)return;long now=SystemClock.elapsedRealtime();put(report,"heartbeatCount",report.optInt("heartbeatCount")+1);put(report,"lastHeartbeatAt",stamp());put(report,"lastHeartbeatElapsedMs",now);put(report,"maxHeartbeatGapMs",Math.max(report.optLong("maxHeartbeatGapMs"),now-lastHeartbeat));put(report,"maxWorkerAwakeGapMs",Math.max(report.optLong("maxWorkerAwakeGapMs"),SystemClock.uptimeMillis()-lastUptime));put(report,"maxSleepGapMs",Math.max(report.optLong("maxSleepGapMs"),(now-lastHeartbeat)-(SystemClock.uptimeMillis()-lastUptime)));lastHeartbeat=now;lastUptime=SystemClock.uptimeMillis();put(report,"screen",screenMonitor.snapshot());put(report,"wakeLockHeld",wake!=null&&wake.isHeld());save();handler.postDelayed(this::heartbeat,5000);}
+    private void scheduleQuery(long delay){if(!live)return;if(scheduledQuery!=null)handler.removeCallbacks(scheduledQuery);nextQueryDue=SystemClock.elapsedRealtime()+delay;put(report,"nextQueryElapsedMs",nextQueryDue);put(report,"nextQueryAt",new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSXXX",Locale.ROOT).format(new Date(System.currentTimeMillis()+delay)));scheduledQuery=this::query;handler.postDelayed(scheduledQuery,delay);save();}
+    private void query(){
+        if(!live||busy)return;busy=true;int gen=generation,n=++round;NativeApi runApi=api;LabPlatform runSimulation=simulation;boolean atVisible=visible;JSONObject atScreen=screenMonitor.snapshot();long queryAt=SystemClock.elapsedRealtime();String requestedAt=stamp();
+        put(report,"queries",round);put(report,"lastQueryStartedAt",requestedAt);put(report,"maxQueryDelayMs",Math.max(report.optLong("maxQueryDelayMs"),nextQueryDue<0?0:Math.max(0,queryAt-nextQueryDue)));put(report,"nextQueryAt",null);put(report,"nextQueryElapsedMs",0);
+        event("queryStarted",NativeApi.object("round",n,"uiVisible",atVisible,"screen",atScreen,"elapsedMs",queryAt-started));if(!live)return;notice("第"+round+"次查询 · 点此返回应用");
+        executor.execute(()->{try{NativeApi.Result r=runSimulation==null?runApi.query():runSimulation.query(SystemClock.elapsedRealtime());handler.post(()->{
+            if(!live||gen!=generation)return;busy=false;networkFailures=0;if(simulation==null)nativeAuth=runApi.successfulAuthEvidence(r);else put(report,"simulationPlatform",simulation.state(SystemClock.elapsedRealtime()));JSONObject responseScreen=screenMonitor.snapshot();put(report,"lastQueryFinishedAt",stamp());put(report,"successfulQueries",report.optInt("successfulQueries")+1);
+            if(!atVisible)put(report,"backgroundQueries",report.optInt("backgroundQueries")+1);
+            if(atScreen.optBoolean("offOrNonInteractive"))put(report,"screenOffQueries",report.optInt("screenOffQueries")+1);
+            if(!atScreen.optBoolean("interactive"))put(report,"nonInteractiveQueries",report.optInt("nonInteractiveQueries")+1);
+            if(atScreen.optInt("displayState")==1)put(report,"displayOffQueries",report.optInt("displayOffQueries")+1);
+            if(atScreen.optBoolean("keyguardLocked"))put(report,"lockedQueries",report.optInt("lockedQueries")+1);
+            if(responseScreen.optBoolean("offOrNonInteractive"))put(report,"screenOffResponseQueries",report.optInt("screenOffResponseQueries")+1);
+            event("api",NativeApi.object("round",n,"uiVisible",atVisible,"screenOn",atScreen.optBoolean("interactive"),"screenAtStart",atScreen,"screenAtResponse",responseScreen,"requestedAt",requestedAt,"durationMs",SystemClock.elapsedRealtime()-queryAt,"elapsedMs",SystemClock.elapsedRealtime()-started,"result",r.safe,"motion",motion.diagnostics()));handle(r);
+        });}catch(Exception e){String code=e.getMessage();String safe=code!=null&&code.matches("HTTP_\\d{3}|[A-Z_]{3,40}")?code:"NETWORK_OR_SCHEMA";handler.post(()->{if(live&&gen==generation){busy=false;clearAuthEvidence();event("apiError",NativeApi.object("round",n,"code",safe,"screen",screenMonitor.snapshot()));boolean retry=!safe.equals("SESSION_EXPIRED")&&!safe.equals("HTTP_401")&&!safe.equals("HTTP_403")&&(safe.equals("NETWORK_OR_SCHEMA")||safe.equals("HTTP_429")||safe.matches("HTTP_5[0-9]{2}"));if(retry&&++networkFailures<=3){put(report,"sampleStale",true);scheduleQuery(Math.min(60000,networkFailures*15000));}else finish("API_ERROR","后台查询失败："+safe+"。请返回应用检查网络或重新登录。");}});}});
+    }
+    private void handle(NativeApi.Result r){
+        try{handleResult(r);}catch(RuntimeException e){finish("POLICY_ERROR","后台数据处理异常，请导出报告。");}
+    }
+    private void handleResult(NativeApi.Result r){
+        if(!live)return;JSONObject ms=motion.snapshot();RunPolicy.Motion m=new RunPolicy.Motion();m.gpsMeters=ms.isNull("gpsMeters")?null:ms.optDouble("gpsMeters");m.steps=ms.isNull("steps")?null:ms.optDouble("steps");m.cadence=ms.isNull("cadence")?null:ms.optDouble("cadence");m.gpsFresh=ms.optBoolean("gpsFresh");m.stepsFresh=ms.optBoolean("stepsFresh");m.stationary=ms.optBoolean("stationary");
+        if(check){if(round==1)speak("后台检查已经开始。请切到桌面或锁屏，九十秒后自动停止。",null);put(report,"lastSample",r.safe.optJSONObject("sample"));save();scheduleQuery(10000);return;}
+        RunPolicy.Decision d=policy.update(r.input,SystemClock.elapsedRealtime(),System.currentTimeMillis(),m);JSONObject decision=NativeApi.object("stage",d.stage,"stop",d.stop,"nextMs",d.stop?null:d.nextMs,"type",d.type,"message",d.message,"confirmedSegments",d.segments,"completedLaps",d.laps,"currentLap",d.laps+1,"lapScope",d.scope,"estimated200Seconds",d.seconds,"estimatedSpeedMps",d.speed,"estimatedSegmentMeters",d.meters,"distanceSource",d.source,"cadence",d.cadence,"warning",d.warning);
+        JSONObject sample=r.safe.optJSONObject("sample");JSONObject previous=report.optJSONObject("lastSample");boolean distanceChanged=sample!=null&&previous!=null&&!sample.optString("distance").equals(previous.optString("distance"));java.math.BigDecimal official=RunPresentation.meters(sample==null?null:sample.optString("distance"));put(decision,"completedLaps",official==null?null:official.divideToIntegralValue(new java.math.BigDecimal("400")).intValue());put(decision,"currentLap",official==null?null:official.divideToIntegralValue(new java.math.BigDecimal("400")).intValue()+1);put(decision,"officialLapEquivalent",official==null?null:official.divide(new java.math.BigDecimal("400")));put(decision,"lapScope","official-distance");put(report,"adaptive",decision);put(report,"sampleStale",sample==null);if(sample!=null){put(report,"lastSample",sample);put(report,"lastSampleAt",stamp());}event("decision",decision);String message=d.message;
+        if("BASELINE".equals(d.type)&&sample!=null&&"1".equals(sample.optString("status")))message="已接入跑步。"+RunPresentation.lapText(sample);
+        if("CARD_CONFIRMED".equals(d.type))message="新打卡已确认。"+RunPresentation.lapText(sample)+" "+r.message;
+        else if(distanceChanged&&!d.stop)message=(message!=null&&!"BASELINE".equals(d.type)?message+" ":"")+"平台距离已更新。"+RunPresentation.lapText(sample);
+        if(d.stop&&"ENDED".equals(d.type))message="平台详情显示跑步已结束或暂停。"+RunPresentation.lapText(sample)+"监测停止。";
+        if(message!=null&&simulation!=null)message="模拟测试。"+message;
+        if(d.stop){String reason="ENDED".equals(d.type)?"RUN_ENDED":d.type;String endText=message==null?"监测已停止。":message;if(message!=null)speak(message,()->finish(reason,endText));else finish(reason,endText);return;}
+        long delay=Math.max(5000,simulation==null?d.nextMs:Math.min(d.nextMs,simulation.interval));notice("已确认"+d.segments+"段 · "+(delay/1000)+"秒后查询");if(message!=null)speak(message,null);scheduleQuery(delay);
+    }
+    private void speak(String message,Runnable done){if(!live)return;lastSpeech=message;if(!voiceReady){event("speechSkipped",NativeApi.object("reason","VOICE_NOT_READY","context",audioContext()));if(done!=null)done.run();return;}if(voiceBusy){queued=message;queuedDone=done;return;}voiceBusy=true;String id="background-"+(++voiceId);JSONObject e=NativeApi.object("kind","RESULT","text",message,"state","REQUESTED","requested",stamp(),"requestContext",audioContext());utterances.put(id,e);callbacks.put(id,done==null?()->{}:done);event("speech",e);int gen=generation;
+        speakingId=id;focus=new AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK).setAudioAttributes(SPEECH_AUDIO).setOnAudioFocusChangeListener(change->{if(change<0&&id.equals(speakingId)){tts.stop();voiceEnd(id,false);}},handler).build();int focusState=audio.requestAudioFocus(focus);put(e,"focusResult",focusState);
+        if(focusState!=AudioManager.AUDIOFOCUS_REQUEST_GRANTED){voiceEnd(id,false);return;}
+        Bundle parameters=new Bundle();parameters.putInt(TextToSpeech.Engine.KEY_PARAM_STREAM,AudioManager.STREAM_MUSIC);
+        if(tts.speak(message,TextToSpeech.QUEUE_FLUSH,parameters,id)!=TextToSpeech.SUCCESS){voiceEnd(id,false);return;}handler.postDelayed(()->{if(live&&gen==generation&&utterances.containsKey(id))voiceEnd(id,false);},25000);
+    }
+    private void voiceEnd(String id,boolean ok){JSONObject e=utterances.remove(id);Runnable cb=callbacks.remove(id);if(e==null)return;put(e,"state",ok?"DONE":"ERROR");put(e,"finished",stamp());put(e,"endContext",audioContext());voiceBusy=false;speakingId=null;if(!ok&&tts!=null)tts.stop();if(focus!=null){audio.abandonAudioFocusRequest(focus);focus=null;}put(report,"lastSpeechState",ok?"DONE":"ERROR");save();if(cb!=null)cb.run();if(live&&queued!=null){String message=queued;Runnable next=queuedDone;queued=null;queuedDone=null;speak(message,next);}}
+    static void labPublish(String action){RunService target=current;if(target!=null)target.handler.post(()->{if(target.live&&target.simulation!=null){target.simulation.publish(action,SystemClock.elapsedRealtime());target.event("simulationPublish",NativeApi.object("action",action,"state",target.simulation.state(SystemClock.elapsedRealtime())));}});}
+    private JSONObject audioContext(){return NativeApi.object("uiVisible",visible,"screen",screenMonitor==null?null:screenMonitor.snapshot(),"thread",Thread.currentThread().getName(),"elapsedRealtimeMs",SystemClock.elapsedRealtime(),"uptimeMs",SystemClock.uptimeMillis(),"musicVolume",audio==null?-1:audio.getStreamVolume(AudioManager.STREAM_MUSIC),"musicActive",audio!=null&&audio.isMusicActive(),"audioMode",audio==null?-1:audio.getMode(),"engine",tts==null?null:tts.getDefaultEngine());}
+    private void event(String type,JSONObject data){if(report==null)return;JSONArray entries=report.optJSONArray("events");entries.put(NativeApi.object("at",stamp(),"type",type,"data",data));while(entries.length()>1000)entries.remove(0);save();}
+    private void save(){if(report==null)return;put(report,"motion",motion.diagnostics());try{latest=new JSONObject(report.toString());}catch(Exception ignored){}latestFile=file;if(!write(file,report)&&live)finish("REPORT_IO","报告写入失败，已停止。");}
+    private void finish(String reason,String text){if(!live){stopForeground(STOP_FOREGROUND_REMOVE);stopSelf();return;}live=false;generation++;handler.removeCallbacksAndMessages(null);if(api!=null)api.cancel();if(screenMonitor!=null)screenMonitor.stop();nextQueryDue=-1;put(report,"nextQueryAt",null);put(report,"nextQueryElapsedMs",0);if(motion!=null)motion.stop();for(JSONObject e:utterances.values())put(e,"state","CANCELLED");utterances.clear();callbacks.clear();if(tts!=null)tts.stop();if(focus!=null){audio.abandonAudioFocusRequest(focus);focus=null;}speakingId=null;voiceBusy=false;queued=null;queuedDone=null;if(wake!=null&&wake.isHeld())wake.release();
+        put(report,"state",reason.equals("BACKGROUND_CHECK_DONE")?"BACKGROUND_CHECK_COMPLETE":"STOPPED");put(report,"finished",stamp());put(report,"reason",reason);put(report,"lastMessage",text);event("termination",NativeApi.object("reason",reason,"message",text));save();stopForeground(STOP_FOREGROUND_REMOVE);stopSelf();}
+    @Override public void onTimeout(int startId,int fgsType){requestFinish("SYSTEM_SERVICE_TIMEOUT","系统前台服务时间限额已到，已停止。");}
+    @Override public void onTaskRemoved(Intent root){handler.post(()->{if(live)event("taskRemoved",NativeApi.object("continues",true));});}
+    @Override public void onDestroy(){handler.post(()->{if(live)finish("SERVICE_DESTROYED","服务被系统关闭，需回到应用重新开始。");if(executor!=null)executor.shutdownNow();if(tts!=null)tts.shutdown();if(wake!=null&&wake.isHeld())wake.release();serviceThread.quitSafely();});if(current==this)current=null;super.onDestroy();}
+}

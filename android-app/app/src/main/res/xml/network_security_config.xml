@@ -1,0 +1,1 @@
+<network-security-config><base-config cleartextTrafficPermitted="false" /><domain-config cleartextTrafficPermitted="true"><domain>202.118.65.138</domain></domain-config></network-security-config>

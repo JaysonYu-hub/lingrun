@@ -1,0 +1,10 @@
+plugins { id 'com.android.application' }
+android {
+    namespace 'cn.trackcheck.beta'
+    compileSdk 35
+    defaultConfig { applicationId 'cn.trackcheck.beta'; minSdk 26; targetSdk 35; versionCode 9; versionName '0.4.3-beta.1' }
+    compileOptions { sourceCompatibility JavaVersion.VERSION_1_8; targetCompatibility JavaVersion.VERSION_1_8 }
+    buildTypes { release { minifyEnabled false } }
+}
+// Distribution uses build.ps1 and the private persistent beta signing key.
+// Android Studio debug builds have a different signature; do not distribute as updates.

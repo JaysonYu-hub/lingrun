@@ -1,0 +1,18 @@
+{
+  "versionName": "0.4.3-beta.1",
+  "versionCode": 9,
+  "channel": "beta",
+  "applicationId": "cn.trackcheck.beta",
+  "minAndroidApi": 26,
+  "targetAndroidApi": 35,
+  "algorithm": "R4-experimental",
+  "foregroundOnly": false,
+  "backgroundExperimental": true,
+  "releaseStage": "internal-testing",
+  "baselineValidation": {
+    "version": "0.2.1-beta.1",
+    "source": "user-reported",
+    "date": "2026-09-29",
+    "summary": "用户反馈本轮测试没有问题；未收到覆盖全部机型的验收数据"
+  }
+}

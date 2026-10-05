@@ -1,0 +1,8 @@
+.tools/
+build/
+.signing/
+.gradle/
+local.properties
+app/build/
+dist/*.apk
+dist/*.idsig
