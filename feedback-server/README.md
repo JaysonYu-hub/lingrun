@@ -1,6 +1,6 @@
-# 跑点助手反馈接收服务
+# 凌跑助手反馈接收服务
 
-这是 0.4.3-beta.1 的配套接收服务源码，尚未部署到公网。需要你自己的服务器、域名和有效 HTTPS 证书。App 不会把反馈直接发送到 Codex 对话；接收后的 JSON 可以再由维护者上传到对话分析。
+这是 0.4.4-beta.1 的配套接收服务源码，尚未部署到公网。需要你自己的服务器、域名和有效 HTTPS 证书。App 不会把反馈直接发送到 Codex 对话；接收后的 JSON 可以再由维护者上传到对话分析。
 
 ## 接收什么
 
@@ -82,7 +82,7 @@
     "schema": 1,
     "feedbackId": "UUID",
     "createdAt": "手机创建时间",
-    "appVersion": "0.4.3-beta.1",
+    "appVersion": "0.4.4-beta.1",
     "description": "用户的问题描述",
     "report": { "simulated": true }
   }

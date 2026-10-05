@@ -1,18 +1,18 @@
-# 跑点助手 · rain_tree
+# 凌跑助手 · rain_tree
 
-面向 Android 与鸿蒙 4 的跑步监测内测 App，当前版本 **0.4.3-beta.1**。不是学校官方应用；鸿蒙原生系统版本的兼容性不在本轮验收范围。
+面向 Android 与鸿蒙 4 的跑步监测内测 App，当前版本 **0.4.4-beta.1**。不是学校官方应用；鸿蒙原生系统版本的兼容性不在本轮验收范围。
 
 ## 下载与首次使用
 
-- [下载 APK：0.4.3-beta.1](downloads/trackcheck-0.4.3-beta.1.apk?raw=true)
-- [完整内测包：APK + 手机操作指南](downloads/trackcheck-test-kit-0.4.3-beta.1.zip?raw=true)
+- [下载 APK：0.4.4-beta.1](downloads/trackcheck-0.4.4-beta.1.apk?raw=true)
+- [完整内测包：APK + 手机操作指南](downloads/trackcheck-test-kit-0.4.4-beta.1.zip?raw=true)
 - [新手快速开始](android-app/新手快速开始.md)
 - [本地模拟测试指南](android-app/原地模拟测试指南.md)
 - [更新记录](android-app/CHANGELOG.md)
 
 已有内测版请直接覆盖安装，不要先卸载。首次进入 App 后完成学校/VPN 登录，再点击学校首页“健身长跑”，然后点应用上方“返回监测”开始使用。
 
-安装包 SHA-256：`85cdd6e35e3edf06733d0e4f500db72a3cdd25793ec8679f0f649f9f1afa4e81`。完整版本与签名证书信息见 [release.json](downloads/release.json)。这里提供仓库文件下载，尚未设置 GitHub Releases 自动发布。
+安装包 SHA-256：`2a56c22fc0652fb7e4e25f78c2b06ac2a4504868d90050fdaff39046dd7f727d`。完整版本与签名证书信息见 [release.json](downloads/release.json)。这里提供仓库文件下载，尚未设置 GitHub Releases 自动发布。
 
 ## 功能
 
@@ -31,7 +31,7 @@
 3. 测试者在“测试与报告 → 反馈服务器设置”配置，按 [问题反馈指南](android-app/问题反馈使用指南.md) 操作。
 4. 维护者通过 SSH/SFTP 读取服务器私有目录中的反馈 JSON。需要进一步分析时，再手动上传到对话。
 
-[反馈服务源码压缩包](downloads/trackcheck-feedback-server-0.4.3-beta.1.zip?raw=true)。不要把实际报告、登录凭据或提交码发到公开 Issues，也不要将服务的数据目录放进 Git 仓库。
+[反馈服务源码压缩包](downloads/trackcheck-feedback-server-0.4.4-beta.1.zip?raw=true)。不要把实际报告、登录凭据或提交码发到公开 Issues，也不要将服务的数据目录放进 Git 仓库。
 
 ## 项目结构与开发
 

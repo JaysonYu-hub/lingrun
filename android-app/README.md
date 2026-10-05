@@ -1,6 +1,6 @@
-# 跑点助手 Android App
+# 凌跑助手 Android App
 
-版本 **0.4.3-beta.1**，包名 `cn.trackcheck.beta`，最低 API 26，目标 API 35。面向 Android 与鸿蒙 4 内测，不依赖 AutoJs6 或无障碍。
+版本 **0.4.4-beta.1**，包名 `cn.trackcheck.beta`，最低 API 26，目标 API 35。面向 Android 与鸿蒙 4 内测，不依赖 AutoJs6 或无障碍。
 
 安装包及操作入口见 [项目首页](../README.md)。本版本保留本地模拟与 JSON 导出，新增可配置的反馈接收服务；服务器需要独立部署。
 

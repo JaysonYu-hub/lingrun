@@ -54,7 +54,7 @@ final class BackgroundSetup {
         showDialog();
     }
     private boolean open(Intent intent){try{activity.startActivityForResult(intent,SETTINGS_REQUEST);return true;}catch(ActivityNotFoundException|SecurityException e){return false;}}
-    private void openAppSettings(){if(!open(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,Uri.parse("package:"+activity.getPackageName())))){new AlertDialog.Builder(activity).setTitle("系统未提供设置入口").setMessage("请在系统设置中打开跑点助手的应用详情，检查通知、后台活动及电池优化。").setPositiveButton("返回",(d,w)->showDialog()).show();}}
+    private void openAppSettings(){if(!open(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,Uri.parse("package:"+activity.getPackageName())))){new AlertDialog.Builder(activity).setTitle("系统未提供设置入口").setMessage("请在系统设置中打开凌跑助手的应用详情，检查通知、后台活动及电池优化。").setPositiveButton("返回",(d,w)->showDialog()).show();}}
     boolean onPermissionsResult(int request){if(request!=NOTIFICATION_REQUEST)return false;requestBattery();return true;}
     boolean onActivityResult(int request){if(request!=SETTINGS_REQUEST)return false;showDialog();return true;}
 }
