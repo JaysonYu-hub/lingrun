@@ -4,8 +4,8 @@
 
 ## 下载与使用
 
-- [版本发布页与 APK 下载](https://github.com/JaysonYu-hub/rain_tree/releases/tag/v0.4.4-beta.1)
-- [直接下载 APK](https://github.com/JaysonYu-hub/rain_tree/releases/download/v0.4.4-beta.1/LingRun-0.4.4-beta.1.apk)
+- [版本发布页与 APK 下载](https://github.com/JaysonYu-hub/lingrun/releases/tag/v0.4.4-beta.1)
+- [直接下载 APK](https://github.com/JaysonYu-hub/lingrun/releases/download/v0.4.4-beta.1/LingRun-0.4.4-beta.1.apk)
 - [首次使用指南](android-app/新手快速开始.md)
 - [使用说明](android-app/内测版使用说明.md)
 - [更新记录](android-app/CHANGELOG.md)
