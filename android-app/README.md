@@ -1,27 +1,24 @@
-# 凌跑助手 Android App
+# 凌跑助手 App 源码
 
-版本 **0.4.4-beta.1**，包名 `cn.trackcheck.beta`，最低 API 26，目标 API 35。面向 Android 与鸿蒙 4 内测，不依赖 AutoJs6 或无障碍。
+当前版本 **0.4.4-beta.1**，包名 `cn.trackcheck.beta`，最低 Android API 26、目标 API 35。
 
-安装包及操作入口见 [项目首页](../README.md)。本版本保留本地模拟与 JSON 导出，新增可配置的反馈接收服务；服务器需要独立部署。
+## Windows 构建
 
-## 构建（Windows）
-
-准备 Node.js 与 JDK 17，从仓库根目录执行：
+准备 Node.js 和 JDK 17，从仓库根目录执行：
 
 ```powershell
 .\android-app\setup-tools.ps1
-.\android-app\verify.ps1 -Jdk '你的JDK17路径'
 .\android-app\build.ps1 -Jdk '你的JDK17路径'
 ```
 
-SDK 下载及主机测试库校验由 `setup-tools.ps1` 完成。构建输出位于 `android-app/dist/`。部分 Java 调用点测试使用环境变量 `TRACKCHECK_TEST_JDK` 指定 JDK，运行验证脚本时统一设置为传入的 JDK。
+本机已使用 Node.js 26.1.0 验证。构建脚本会检查版本一致性、生成网页运行资源，再编译和签名，输出到 `android-app/dist/`。SDK 默认位于 `.tools/`，也可以通过 `build.ps1 -ToolsRoot '已有工具目录'` 指定。
 
-签名私钥没有发布到仓库。首次本地构建会在被 Git 忽略的 `.signing/` 生成新签名，该包不能覆盖维护者签名的已安装版本。维护者发布更新必须使用原有私钥；不要将私钥或密码提交到 GitHub。`package-release.ps1` 会校验已有发行元数据的签名，生成安装包与用户资料包。
+`runtime/` 保存 App 实际使用的网页接口读取、规则判断与内置自检模块，不依赖仓库外的旧测试工程。`app/` 是原生 Java Android 工程。
 
-运行 `node android-app/bump-version.cjs <版本名> <递增版本码>` 更新版本后，维护者需同步更新 CHANGELOG、操作文档、首页下载链接和 downloads 中的发行文件。
+## 版本与签名
 
-## 架构和验证边界
+使用 `node android-app/bump-version.cjs <版本名> <递增版本码>` 更新版本；维护者随后同步 CHANGELOG、用户说明及首页下载链接。
 
-Activity 负责学校 WebView 登录，RunService 独立执行 HTTP 查询、计时、语音和可选传感器辅助。私有学校会话仅供运行使用，不进入反馈数据。查询只用观察到的规则和详情端点，不写学校运动记录。
+签名私钥不在仓库内。首次本地构建会生成新的本地签名，不能覆盖维护者签名的已安装 App。维护者分发更新必须沿用原私钥，且不得上传 `.signing/`。`package-release.ps1` 生成安装包和使用资料，不打包独立测试工程或服务器。
 
-原生主机测试不等于真实 Android 生命周期、锁屏或语音测试。使用 [本地模拟](原地模拟测试指南.md)、[后台检查](后台测试操作说明.md) 验证手机行为；反馈入口说明见 [问题反馈使用指南](问题反馈使用指南.md)。
+本仓库的编译成功不代表所有手机上的后台、定位或语音均通过；发布前仍需在维护者本地进行回归和真机验收。此轮仅整理仓库，不改变现有 APK 功能。

@@ -1,15 +1,15 @@
 const fs=require('node:fs'),path=require('node:path');
-const root=path.join(__dirname,'..');
+const root=__dirname;
 const dest=path.join(__dirname,'app/src/main/assets');fs.mkdirSync(dest,{recursive:true});
 const version=JSON.parse(fs.readFileSync(path.join(__dirname,'version.json'),'utf8'));
 const manifest=fs.readFileSync(path.join(__dirname,'app/src/main/AndroidManifest.xml'),'utf8');
 const main=fs.readFileSync(path.join(__dirname,'app/src/main/java/cn/trackcheck/beta/MainActivity.java'),'utf8');
 if(!manifest.includes(`android:versionCode="${version.versionCode}"`)||!manifest.includes(`android:versionName="${version.versionName}"`)||!main.includes(`VERSION="${version.versionName}"`))throw Error('Version files disagree; use bump-version.cjs');
 // Build directly from the audited R4 source. Do not download executable runtime code.
-const core=require('../quark-api/core.cjs'),install=require('../api-test/session.js'),selfCheck=require('../api-test/self-check.cjs');
+const core=require('./runtime/core.cjs'),install=require('./runtime/session.js'),selfCheck=require('./runtime/self-check.cjs');
 const moduleSource=(file,name)=>`window.${name}=(function(){var module={exports:{}};\n${fs.readFileSync(path.join(root,file),'utf8')}\nreturn module.exports;})();`;
 const base=`(function(){var core=(${core.toString()})();var install=(${install.toString()});install(core);window.__exerciseApiSelfCheck=function(){return (${selfCheck.toString()})(install,core);};})();`;
-const shared=moduleSource('api-test/adaptive-run.js','__trackPolicy')+moduleSource('api-test/phone-workflow.js','__trackWorkflow');
+const shared=moduleSource('runtime/adaptive-run.js','__trackPolicy')+moduleSource('runtime/phone-workflow.js','__trackWorkflow');
 fs.writeFileSync(path.join(dest,'app-bundle.js'),base+shared);
 const offline=`window.__runOfflineTests=function(){
  var checks=[],p=window.__trackPolicy.create(),events=[],epoch=1790400000000;

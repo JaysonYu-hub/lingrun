@@ -1,9 +1,9 @@
-param([string]$Jdk='C:/Program Files/Microsoft/jdk-17.0.12.7-hotspot',[switch]$Unsigned)
+param([string]$Jdk='C:/Program Files/Microsoft/jdk-17.0.12.7-hotspot',[switch]$Unsigned,[string]$ToolsRoot=(Join-Path $PSScriptRoot '.tools'))
 $ErrorActionPreference='Stop'
 $appRoot=$PSScriptRoot
 $version=Get-Content -Raw (Join-Path $appRoot 'version.json') | ConvertFrom-Json
-$sdkPlatform=Join-Path $appRoot '.tools/platform/android-35-ext15/android.jar'
-$sdkTools=Join-Path $appRoot '.tools/build-tools/android-15'
+$sdkPlatform=Join-Path $ToolsRoot 'platform/android-35-ext15/android.jar'
+$sdkTools=Join-Path $ToolsRoot 'build-tools/android-15'
 $originalSource=Join-Path $appRoot 'app/src/main'
 # Windows aapt2 cannot reliably consume non-ASCII paths. Use an isolated ASCII staging directory.
 $buildDir=Join-Path ([IO.Path]::GetTempPath()) ('trackcheck-build-'+[Guid]::NewGuid().ToString('N'))
@@ -40,7 +40,7 @@ if(!(Test-Path -LiteralPath $keyFile)) {
     Run-Native (Join-Path $Jdk 'bin/keytool.exe') @('-genkeypair','-keystore',$keyFile,'-storetype','PKCS12','-storepass:file',$passwordFile,'-alias','trackcheck-beta','-keyalg','RSA','-keysize','3072','-validity','10000','-dname','CN=TrackCheck Beta, O=Local Testing','-noprompt')
 }
 if(!(Test-Path -LiteralPath $passwordFile)) { throw 'Existing signing key password missing. Restore backup; do not create a replacement key.' }
-$apk=Join-Path $distDir ('trackcheck-'+$version.versionName+'.apk')
+$apk=Join-Path $distDir ('LingRun-'+$version.versionName+'.apk')
 Run-Native (Join-Path $Jdk 'bin/java.exe') @('-jar',(Join-Path $sdkTools 'lib/apksigner.jar'),'sign','--ks',$keyFile,'--ks-key-alias','trackcheck-beta','--ks-pass',('file:'+$passwordFile),'--out',$apk,$unsignedApk)
 Run-Native (Join-Path $Jdk 'bin/java.exe') @('-jar',(Join-Path $sdkTools 'lib/apksigner.jar'),'verify','--verbose','--print-certs',$apk)
 Get-FileHash -LiteralPath $apk -Algorithm SHA256 | Format-List

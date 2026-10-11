@@ -22,3 +22,12 @@ phone-report-*.json
 trackcheck-*.json
 *.log
 android-app/dist/
+# Local-only development projects; app runtime sources live under android-app/runtime.
+/api-test/
+/quark-api/
+/phone-test/
+/desktop/
+/feedback-server/
+/android-app/tests/
+/downloads/*test-kit*.zip
+/downloads/*feedback-server*.zip

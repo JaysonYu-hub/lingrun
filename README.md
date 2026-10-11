@@ -1,55 +1,32 @@
-# 凌跑助手 · rain_tree
+# 凌跑助手
 
-面向 Android 的跑步监测内测 App，当前版本 **0.4.4-beta.1**。不是学校官方应用。
+面向 Android 的跑步监测助手，当前为 **0.4.4-beta.1 内测版**，不是学校官方应用。
 
-## 下载与首次使用
+## 下载与使用
 
-- [下载 APK：0.4.4-beta.1](downloads/trackcheck-0.4.4-beta.1.apk?raw=true)
-- [完整内测包：APK + 手机操作指南](downloads/trackcheck-test-kit-0.4.4-beta.1.zip?raw=true)
-- [新手快速开始](android-app/新手快速开始.md)
-- [本地模拟测试指南](android-app/原地模拟测试指南.md)
+- [版本发布页与 APK 下载](https://github.com/JaysonYu-hub/rain_tree/releases/tag/v0.4.4-beta.1)
+- [直接下载 APK](https://github.com/JaysonYu-hub/rain_tree/releases/download/v0.4.4-beta.1/LingRun-0.4.4-beta.1.apk)
+- [首次使用指南](android-app/新手快速开始.md)
+- [使用说明](android-app/内测版使用说明.md)
 - [更新记录](android-app/CHANGELOG.md)
 
-已有内测版请直接覆盖安装，不要先卸载。首次进入 App 后完成学校/VPN 登录，再点击学校首页“健身长跑”，然后点应用上方“返回监测”开始使用。
+已有版本请直接覆盖安装，不要先卸载。打开 App，完成学校/VPN 登录，进入学校首页的“健身长跑”，再点“返回监测”。
 
-安装包 SHA-256：`2a56c22fc0652fb7e4e25f78c2b06ac2a4504868d90050fdaff39046dd7f727d`。完整版本与签名证书信息见 [release.json](downloads/release.json)。这里提供仓库文件下载，尚未设置 GitHub Releases 自动发布。
+安装包 SHA-256：`2a56c22fc0652fb7e4e25f78c2b06ac2a4504868d90050fdaff39046dd7f727d`。版本与签名证书信息见 [release.json](downloads/release.json)。
 
-## 功能
+## 主要功能
 
-- 从用户已登录的学校接口只读获取距离、用时、检查点记录，变化时语音提示。
-- 跑道按 400 米折算圈数；定位与计步可选，不能替代学校打卡确认。
-- 原生后台监测和语音，包含后台设置引导；不同系统的锁屏存活仍需实测。
-- 无需实际跑步的本地模拟平台，支持自定义测试间隔。
-- 用户填写问题文字，选择测试 JSON 后提交至维护者配置的 HTTPS 服务；失败保留，支持重试和回执。
+- 查看学校平台记录的路程、累计用时和下个检查点剩余时间。
+- 按平台距离折算圈数，在记录更新时语音提示。
+- 支持后台监测，定位与计步辅助可选。
+- 支持导出问题报告；在线反馈需要维护者另行配置接收服务。
 
-## 反馈服务：需要单独部署
+后台运行效果受手机系统和授权设置影响。只有学校记录能确认打卡，位置与步频只能辅助估算。
 
-**上传源码到 GitHub 不代表反馈服务已上线。** GitHub 仓库/Pages 不运行这里的 Node.js 接收进程。目前没有预置的公网反馈地址。
+## 源码
 
-1. 维护者按 [服务器部署说明](feedback-server/README.md) 部署 HTTPS 接收服务。
-2. 把接收地址及测试提交码提供给测试者。
-3. 测试者在“测试与报告 → 反馈服务器设置”配置，按 [问题反馈指南](android-app/问题反馈使用指南.md) 操作。
-4. 维护者通过 SSH/SFTP 读取服务器私有目录中的反馈 JSON。需要进一步分析时，再手动上传到对话。
+`android-app/` 为 App 源码与构建脚本，`downloads/` 为当前安装包。构建方法见 [App 开发说明](android-app/README.md)。本仓库当前版本不包含独立 API 调试项目、旧浏览器方案、手机测试工程或反馈服务器源码；App 构建必需的模块位于 `android-app/runtime/`。
 
-[反馈服务源码压缩包](downloads/trackcheck-feedback-server-0.4.4-beta.1.zip?raw=true)。不要把实际报告、登录凭据或提交码发到公开 Issues，也不要将服务的数据目录放进 Git 仓库。
+本项目公开提供源码与内测安装包。发布到 GitHub 不代表已经覆盖全部手机的真机验收；请先小范围试用。尚未设置自动更新，升级时下载新版 APK 覆盖安装。
 
-## 项目结构与开发
-
-- `android-app/`：Java Android App、构建脚本、原生测试与用户指南。
-- `feedback-server/`：Node.js 接收服务及集成测试，无第三方运行依赖。
-- `api-test/`、`quark-api/core.cjs`：App 打包使用的共享 JS 逻辑与回归测试，保留部分历史手机测试代码作对照。
-- `desktop/`、`phone-test/`：共享解析器回归依赖，不是完整的旧电脑端软件。
-- `downloads/`：经过签名的内测安装包和分发资料。
-
-Node.js 回归（不请求学校、不需要账号）：
-
-```sh
-npm test
-npm run test:feedback
-```
-
-Android 构建见 [构建说明](android-app/README.md)。当前 Windows 构建脚本使用 JDK 17、Android SDK 35；本地 Node 验证版本为 26.1.0。第三方工具、签名私钥、用户报告均不包含在仓库中。
-
-## 验证范围
-
-已通过共享逻辑、原生主机回归、反馈接收服务本地测试与 APK 编译/签名验证。公网 HTTPS 提交、各机型反馈表单和长期后台运行需要部署后真机验证。反馈模块不会读取学校会话，也不会自动向 GitHub 或其他平台上传用户报告。
+一般问题可在 Issues 中描述操作步骤、手机系统和版本号。请勿在公开 Issues 上传含个人信息的原始报告、学校登录凭据或反馈提交码；需要报告时先与维护者确认私下发送方式。
