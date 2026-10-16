@@ -1,25 +1,25 @@
 # 凌跑助手
 
-面向 Android 的跑步监测助手，当前为 **0.4.4-beta.1 内测版**，不是学校官方应用。
+面向 Android 的跑步监测助手，当前为 **0.4.5-beta.1 内测版**，不是学校官方应用。
 
 ## 下载与使用
 
-- [版本发布页与 APK 下载](https://github.com/JaysonYu-hub/lingrun/releases/tag/v0.4.4-beta.1)
-- [直接下载 APK](https://github.com/JaysonYu-hub/lingrun/releases/download/v0.4.4-beta.1/LingRun-0.4.4-beta.1.apk)
+- [版本发布页与 APK 下载](https://github.com/JaysonYu-hub/lingrun/releases/tag/v0.4.5-beta.1)
+- [直接下载 APK](https://github.com/JaysonYu-hub/lingrun/releases/download/v0.4.5-beta.1/LingRun-0.4.5-beta.1.apk)
 - [首次使用指南](android-app/新手快速开始.md)
 - [使用说明](android-app/内测版使用说明.md)
 - [更新记录](android-app/CHANGELOG.md)
 
 已有版本请直接覆盖安装，不要先卸载。打开 App，完成学校/VPN 登录，进入学校首页的“健身长跑”，再点“返回监测”。
 
-安装包 SHA-256：`2a56c22fc0652fb7e4e25f78c2b06ac2a4504868d90050fdaff39046dd7f727d`。版本与签名证书信息见 [release.json](downloads/release.json)。
+安装包 SHA-256：`a8124ffecd709b711bc66164a2cb0e9836e1cc3e6ae4b99d034215cfc21ee691`。版本与签名证书信息见 [release.json](downloads/release.json)。
 
 ## 主要功能
 
 - 查看学校平台记录的路程、累计用时和下个检查点剩余时间。
 - 按平台距离折算圈数，在记录更新时语音提示。
-- 支持后台监测，定位与计步辅助可选。
-- 支持导出问题报告；在线反馈需要维护者另行配置接收服务。
+- 支持后台监测，开始监测时自动启用已授权的定位与计步辅助；拒绝权限仍可使用基础监测。
+- 支持语音试听、0.5～2.0 倍语速设置和问题报告导出。用户端不显示开发测试入口。
 
 后台运行效果受手机系统和授权设置影响。只有学校记录能确认打卡，位置与步频只能辅助估算。
 

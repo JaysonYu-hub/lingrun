@@ -1,4 +1,4 @@
-param([string]$Jdk='C:/Program Files/Microsoft/jdk-17.0.12.7-hotspot',[switch]$Unsigned,[string]$ToolsRoot=(Join-Path $PSScriptRoot '.tools'))
+param([string]$Jdk='C:/Program Files/Microsoft/jdk-17.0.12.7-hotspot',[switch]$Unsigned,[string]$ToolsRoot=(Join-Path $PSScriptRoot '.tools'),[switch]$DeveloperTools,[string]$SigningRoot=(Join-Path $PSScriptRoot '.signing'))
 $ErrorActionPreference='Stop'
 $appRoot=$PSScriptRoot
 $version=Get-Content -Raw (Join-Path $appRoot 'version.json') | ConvertFrom-Json
@@ -14,6 +14,11 @@ function Run-Native([string]$exe,[string[]]$arguments) { & $exe @arguments; if($
 New-Item -ItemType Directory -Force -Path $buildDir,$distDir,(Join-Path $buildDir 'generated'),(Join-Path $buildDir 'classes'),(Join-Path $buildDir 'dex') | Out-Null
 Run-Native 'node' @((Join-Path $appRoot 'prepare-assets.cjs'))
 Copy-Item -LiteralPath $originalSource -Destination $sourceRoot -Recurse
+$buildConfig=Join-Path $sourceRoot 'java/cn/trackcheck/beta/ClientBuild.java'
+if($DeveloperTools) {
+    $configText=[IO.File]::ReadAllText($buildConfig).Replace('DEVELOPER_TOOLS=false','DEVELOPER_TOOLS=true')
+    [IO.File]::WriteAllText($buildConfig,$configText,(New-Object Text.UTF8Encoding($false)))
+}
 Copy-Item -LiteralPath $sdkPlatform -Destination (Join-Path $buildDir 'android.jar')
 $sdkPlatform=Join-Path $buildDir 'android.jar'
 Run-Native (Join-Path $sdkTools 'aapt2.exe') @('compile','--dir',(Join-Path $sourceRoot 'res'),'-o',(Join-Path $buildDir 'resources.zip'))
@@ -31,7 +36,7 @@ try { foreach($dex in (Get-ChildItem (Join-Path $buildDir 'dex') -Filter '*.dex'
 $unsignedApk=Join-Path $buildDir 'aligned.apk'
 Run-Native (Join-Path $sdkTools 'zipalign.exe') @('-f','4',(Join-Path $buildDir 'base.apk'),$unsignedApk)
 if($Unsigned) { Write-Output $unsignedApk; exit 0 }
-$signing=Join-Path $appRoot '.signing'
+$signing=$SigningRoot
 New-Item -ItemType Directory -Force -Path $signing | Out-Null
 $keyFile=Join-Path $signing 'beta.p12'; $passwordFile=Join-Path $signing 'password.txt'
 if(!(Test-Path -LiteralPath $keyFile)) {
@@ -40,7 +45,8 @@ if(!(Test-Path -LiteralPath $keyFile)) {
     Run-Native (Join-Path $Jdk 'bin/keytool.exe') @('-genkeypair','-keystore',$keyFile,'-storetype','PKCS12','-storepass:file',$passwordFile,'-alias','trackcheck-beta','-keyalg','RSA','-keysize','3072','-validity','10000','-dname','CN=TrackCheck Beta, O=Local Testing','-noprompt')
 }
 if(!(Test-Path -LiteralPath $passwordFile)) { throw 'Existing signing key password missing. Restore backup; do not create a replacement key.' }
-$apk=Join-Path $distDir ('LingRun-'+$version.versionName+'.apk')
+$variant=if($DeveloperTools){'-local-dev'}else{''}
+$apk=Join-Path $distDir ('LingRun-'+$version.versionName+$variant+'.apk')
 Run-Native (Join-Path $Jdk 'bin/java.exe') @('-jar',(Join-Path $sdkTools 'lib/apksigner.jar'),'sign','--ks',$keyFile,'--ks-key-alias','trackcheck-beta','--ks-pass',('file:'+$passwordFile),'--out',$apk,$unsignedApk)
 Run-Native (Join-Path $Jdk 'bin/java.exe') @('-jar',(Join-Path $sdkTools 'lib/apksigner.jar'),'verify','--verbose','--print-certs',$apk)
 Get-FileHash -LiteralPath $apk -Algorithm SHA256 | Format-List

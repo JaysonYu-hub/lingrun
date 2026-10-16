@@ -19,7 +19,7 @@ import java.security.MessageDigest;
 import java.util.*;
 
 public final class MainActivity extends Activity {
-    private static final String VERSION="0.4.4-beta.1";
+    private static final String VERSION="0.4.5-beta.1";
     private final Handler main=new Handler(Looper.getMainLooper());
     private final Handler work=new Handler(Looper.getMainLooper());
     private LinearLayout root,monitorPanel,testPanel,webPanel;
@@ -53,6 +53,9 @@ public final class MainActivity extends Activity {
     private TextView backgroundStatus;
     private final ArrayList<String> observed=new ArrayList<>();
     private final ArrayList<JSONObject> observedAuth=new ArrayList<>();
+    private final PageNavigation pageNavigation=new PageNavigation();
+    private String permissionContinuation=null;
+    private boolean permissionRequestInFlight=false;
 
     private static JSONObject obj(Object... fields){JSONObject o=new JSONObject();try{for(int i=0;i<fields.length;i+=2)o.put(String.valueOf(fields[i]),fields[i+1]==null?JSONObject.NULL:fields[i+1]);}catch(JSONException ignored){}return o;}
     private static String stamp(){return new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSXXX",Locale.ROOT).format(new Date());}
@@ -73,34 +76,35 @@ public final class MainActivity extends Activity {
         try{assetsBundle=asset("app-bundle.js");policyBundle=asset("offline-bundle.js");}catch(IOException e){dialog("安装文件异常","请重新安装完整测试包。");finish();return;}
         root=column();root.setPadding(0,0,0,0);root.setBackgroundColor(Color.rgb(241,246,247));
         root.setOnApplyWindowInsetsListener((v,insets)->{v.setPadding(insets.getSystemWindowInsetLeft(),insets.getSystemWindowInsetTop(),insets.getSystemWindowInsetRight(),insets.getSystemWindowInsetBottom());return insets;});
-        LinearLayout header=column();root.addView(header);label(header,"凌跑助手",24,Color.rgb(16,48,55));label(header,"内测版 · "+VERSION,12,Color.DKGRAY);status=label(header,"先登录学校账号，再进入“健身长跑”。",13,Color.rgb(8,127,140));status.setMaxLines(3);
+        LinearLayout header=column();root.addView(header);label(header,"凌跑助手",24,Color.rgb(16,48,55));label(header,(ClientBuild.DEVELOPER_TOOLS?"本地开发测试 · ":"内测版 · ")+VERSION,12,Color.DKGRAY);status=label(header,"先登录学校账号，再进入“健身长跑”。",13,Color.rgb(8,127,140));status.setMaxLines(3);
         content=new FrameLayout(this);root.addView(content,new LinearLayout.LayoutParams(-1,0,1));
         monitorPanel=column();monitorScroll=new ScrollView(this);monitorScroll.addView(monitorPanel);content.addView(monitorScroll);
         testPanel=column();testScroll=new ScrollView(this);testScroll.addView(testPanel);content.addView(testScroll);testScroll.setVisibility(View.GONE);
         webPanel=new LinearLayout(this);webPanel.setOrientation(LinearLayout.VERTICAL);content.addView(webPanel);webPanel.setVisibility(View.GONE);
         LinearLayout webTools=column();webTools.setPadding(dp(12),dp(6),dp(12),dp(6));webPanel.addView(webTools);webGuide=label(webTools,"登录后，在学校首页点“健身长跑”。",13,Color.rgb(8,112,109));
-        LinearLayout actions=new LinearLayout(this);webTools.addView(actions);Button returnButton=new Button(this);returnButton.setText("返回监测");returnButton.setTextSize(15);primary(returnButton);returnButton.setOnClickListener(v->show("监测"));actions.addView(returnButton,new LinearLayout.LayoutParams(0,-2,1));Button pageBack=new Button(this);pageBack.setText("网页后退");pageBack.setTextSize(14);pageBack.setOnClickListener(v->{if(web.canGoBack())web.goBack();else toast("已经是最早的网页。回到凌跑助手请点“返回监测”。");});actions.addView(pageBack,new LinearLayout.LayoutParams(0,-2,1));
+        LinearLayout actions=new LinearLayout(this);webTools.addView(actions);Button returnButton=new Button(this);returnButton.setText("返回监测");returnButton.setTextSize(15);primary(returnButton);returnButton.setOnClickListener(v->show("监测"));actions.addView(returnButton,new LinearLayout.LayoutParams(0,-2,1));Button pageBack=new Button(this);pageBack.setText("学校首页");pageBack.setTextSize(14);pageBack.setOnClickListener(v->openSchoolHome());actions.addView(pageBack,new LinearLayout.LayoutParams(0,-2,1));
+        button(webTools,"恢复网页",this::recoverSchoolWeb);
         web=new WebView(this);webPanel.addView(web,new LinearLayout.LayoutParams(-1,0,1));web.setVisibility(View.GONE);configureWeb();
-        makeMonitor();makeTests();
-        LinearLayout nav=new LinearLayout(this);for(String name:new String[]{"监测","学校网页","测试与报告"}){Button b=new Button(this);b.setText(name);b.setTextSize(12);b.setTextColor(Color.rgb(8,112,109));b.setBackgroundTintList(android.content.res.ColorStateList.valueOf(Color.WHITE));b.setElevation(0);b.setOnClickListener(v->show(name));nav.addView(b,new LinearLayout.LayoutParams(0,-2,1));}root.addView(nav);setContentView(root);if(Build.VERSION.SDK_INT>=33)getOnBackInvokedDispatcher().registerOnBackInvokedCallback(android.window.OnBackInvokedDispatcher.PRIORITY_DEFAULT,this::handleAppBack);
+        makeMonitor();if(ClientBuild.DEVELOPER_TOOLS)makeTests();else makeSettings();
+        LinearLayout nav=new LinearLayout(this);for(String name:new String[]{"监测","学校网页","测试与报告"}){Button b=new Button(this);b.setText(name.equals("测试与报告")&&!ClientBuild.DEVELOPER_TOOLS?"设置":name);b.setTextSize(12);b.setTextColor(Color.rgb(8,112,109));b.setBackgroundTintList(android.content.res.ColorStateList.valueOf(Color.WHITE));b.setElevation(0);b.setOnClickListener(v->show(name));nav.addView(b,new LinearLayout.LayoutParams(0,-2,1));}root.addView(nav);setContentView(root);if(Build.VERSION.SDK_INT>=33)getOnBackInvokedDispatcher().registerOnBackInvokedCallback(android.window.OnBackInvokedDispatcher.PRIORITY_DEFAULT,this::handleAppBack);
         tts=new TextToSpeech(this,code->{main.post(()->{if(tts==null)return;voiceReady=code==TextToSpeech.SUCCESS&&tts.setLanguage(Locale.SIMPLIFIED_CHINESE)>=0;});});
         tts.setOnUtteranceProgressListener(new UtteranceProgressListener(){
             public void onStart(String id){main.post(()->{JSONObject e=voiceEntries.get(id);if(e!=null){put(e,"started",stamp());put(e,"state","STARTED");save();}});}
             public void onDone(String id){main.post(()->voiceComplete(id,true));}
             public void onError(String id){main.post(()->voiceComplete(id,false));}
         });
-        watchBackground=RunService.running();main.post(new Runnable(){public void run(){if(isFinishing())return;updateSchoolGuide();if(watchBackground)refreshBackground();else motionText.setText(motion.display());boolean running=active||auxiliaryBusy||voiceBusy||RunService.running();startButton.setEnabled(!running);stopButton.setEnabled(running);for(int i=0;i<periods.getChildCount();i++)periods.getChildAt(i).setEnabled(!running);main.postDelayed(this,1500);}});
+        watchBackground=RunService.running();main.post(new Runnable(){public void run(){if(isFinishing())return;if(pageNavigation.timedOut(SystemClock.elapsedRealtime())){web.stopLoading();status("学校网页加载超时，可点“学校首页”重试，或点“恢复网页”。");}updateSchoolGuide();if(watchBackground)refreshBackground();else motionText.setText(motion.display());boolean running=active||auxiliaryBusy||voiceBusy||RunService.running();startButton.setEnabled(!running);stopButton.setEnabled(running);for(int i=0;i<periods.getChildCount();i++)periods.getChildAt(i).setEnabled(!running);main.postDelayed(this,1500);}});
         if(!getPreferences(0).getBoolean("usageGuideV1",false))main.post(this::showUsageGuide);
     }
     private void showUsageGuide(){new AlertDialog.Builder(this).setTitle("第一次使用：按这4步操作")
-        .setMessage("1  学校登录\n点“登录 / 查看学校网页”，在应用内完成学校账号和VPN登录。每人使用自己的账号。\n\n2  进入健身长跑\n看到体育平台首页后，还要点击“健身长跑”。看到早操/晚操考勤、跑操距离等内容，才到正确页面；不是“跑步记录”。\n\n3  返回监测\n点学校网页上方绿色的“返回监测”，或底部“监测”。这是切换应用页面，会保留刚才的学校网页。不要点学校的退出登录。\n\n4  开始监测\n选择早操/晚操，点“开始监测”。听到试听后确认，等监测开始即可使用。没开始跑步时没有距离变化是正常的。\n\n手机返回键/返回手势在学校网页内也会先回监测页。需要退回学校上一页时，使用“网页后退”。\n\n遇到问题，到“测试与报告”导出JSON；应用不会自动上传账号或报告。")
+        .setMessage("1  学校登录\n点“登录 / 查看学校网页”，在应用内完成学校账号和VPN登录。每人使用自己的账号。\n\n2  进入健身长跑\n看到体育平台首页后，还要点击“健身长跑”。看到早操/晚操考勤、跑操距离等内容，才到正确页面；不是“跑步记录”。\n\n3  返回监测\n点学校网页上方绿色的“返回监测”，或底部“监测”。这是切换应用页面，会保留刚才的学校网页。不要点学校的退出登录。\n\n4  开始监测\n选择早操/晚操，点“开始监测”。听到试听后确认，等监测开始即可使用。没开始跑步时没有距离变化是正常的。\n\n手机返回键/返回手势在学校网页内也会先回监测页。需要重新进入时，使用“学校首页”；网页无响应时点“恢复网页”，不需要退出整个应用。\n\n遇到问题，到设置中的问题反馈导出JSON；应用不会自动上传账号或报告。")
         .setPositiveButton("去学校网页登录",(d,w)->{getPreferences(0).edit().putBoolean("usageGuideV1",true).apply();show("学校网页");})
         .setNegativeButton("知道了",(d,w)->getPreferences(0).edit().putBoolean("usageGuideV1",true).apply()).show();}
     private void updateSchoolGuide(){if(webGuide==null||homeGuide==null||web==null)return;String url=web.getUrl();boolean exercise=BrowserPolicy.exercise(url);String hint=exercise?"第3步：已到健身长跑。点“返回监测”，再点“开始监测”。":BrowserPolicy.sports(url)?"第2步：在学校首页点击“健身长跑”，不是“跑步记录”。":"第1步：完成学校/VPN登录，再进入“健身长跑”。";webGuide.setText(hint);homeGuide.setText(exercise?"已到健身长跑页面 · 可以点击开始监测":"学校登录 → 健身长跑 → 返回监测");}
     private void makeMonitor(){
         LinearLayout help=card(monitorPanel);homeGuide=label(help,"学校登录 → 健身长跑 → 返回监测",14,Color.rgb(8,112,109));button(help,"首次使用？查看操作指南",this::showUsageGuide);
         backgroundStatus=label(help,backgroundSetup.summary(),12,Color.DKGRAY);button(help,"后台运行设置 · 系统授权",()->{if(idle())backgroundSetup.show();});
-        button(help,"遇到问题？填写反馈",this::feedback);
+        button(help,"遇到问题？导出报告",()->show("测试与报告"));
         LinearLayout overview=card(monitorPanel);label(overview,"本次运动",19,Color.rgb(16,48,55));label(overview,"平台记录路程",12,Color.rgb(91,112,116));metrics=label(overview,"—",40,Color.rgb(8,112,109));
         LinearLayout stats=new LinearLayout(this);overview.addView(stats);distanceValue=metric(stats,"折合圈数 · 400米/圈");timeValue=metric(stats,"累计用时");
         label(overview,"下个点剩余时间",12,Color.rgb(91,112,116));countdownValue=label(overview,"—",25,Color.rgb(16,48,55));label(overview,"以最近一次学校记录为准；停止后不显示倒计时。",11,Color.rgb(91,112,116));
@@ -108,7 +112,7 @@ public final class MainActivity extends Activity {
         periods=new RadioGroup(this);periods.setOrientation(LinearLayout.HORIZONTAL);for(int i=0;i<2;i++){RadioButton rb=new RadioButton(this);rb.setId(101+i);rb.setText(i==0?"早操":"晚操");periods.addView(rb,new RadioGroup.LayoutParams(0,-2,1));}periods.check(101);
         controls.addView(periods);startButton=button(controls,"开始监测",()->begin("RUN"));primary(startButton);stopButton=button(controls,"停止监测",()->stop("USER_STOP","已停止监测。"));stopButton.setEnabled(false);button(controls,"登录 / 查看学校网页",()->show("学校网页"));
         LinearLayout note=card(monitorPanel);label(note,"最近提示",17,Color.rgb(16,48,55));promptText=label(note,"开始监测后，将在这里显示打卡提示。",15,Color.DKGRAY);button(note,"重播提示",()->{if(RunService.running()){RunService.replay();return;}if(lastMessage.isEmpty())toast("暂无可重播的提示。");else say(lastMessage,"REPLAY",null);});
-        label(monitorPanel,"圈数 = 平台累计距离 ÷ 400米，重新开始监测不会将已有距离归零。定位与步频可选，可在“测试与报告”中设置。",12,Color.rgb(91,112,116));
+        label(monitorPanel,"圈数 = 平台累计距离 ÷ 400米，重新开始监测不会将已有距离归零。定位与计步会随监测自动启用，首次需系统授权；未授权时继续按打卡间隔估算。",12,Color.rgb(91,112,116));
     }
     private void makeTests(){
         makeSimulationControls();
@@ -125,6 +129,63 @@ public final class MainActivity extends Activity {
         button(b,"反馈服务器设置",()->new FeedbackUi(this).settings());
         LinearLayout c=card(testPanel);label(c,"版本与会话",19,Color.BLACK);button(c,"测试说明与更新方式",()->dialog("内测版 "+VERSION,"1. 单次诊断只验证查询。\n2. 五轮验收含试听、真实查询、结果听感确认和自动停止。\n3. 实跑需核对A→B→A、半圈与一圈。\n4. 定位/计步诊断可在走路时观察，不必开始跑步。\n5. 先做90秒后台检查；实跑服务启动后可切后台、锁屏。单次和五轮测试仍需前台。\n6. 导出报告后自行发送给维护者；应用不自动上传。\n7. 后续安装同一签名且版本号更高的APK可覆盖升级，不要先卸载。\n8. 无自动更新服务器；应用不下载或执行远程脚本。"));button(c,"清除本机学校登录",()->{if(idle())new AlertDialog.Builder(this).setTitle("清除登录").setMessage("将清除此应用的学校Cookie和网页存储，需要重新登录；本地测试报告保留。").setPositiveButton("清除",(d,w)->{CookieManager.getInstance().removeAllCookies(null);WebStorage.getInstance().deleteAllData();web.clearCache(true);web.clearHistory();observedClear();web.loadUrl("about:blank");loaded=false;status("已清除本机登录。");}).setNegativeButton("取消",null).show();});
     }
+    private void makeSettings(){
+        // Keep internal report sinks without displaying diagnostics or test-only controls.
+        tester=new EditText(this);motionText=new TextView(this);reportText=new TextView(this);
+        LinearLayout speech=card(testPanel);label(speech,"语音设置",20,Color.rgb(16,48,55));
+        TextView rateLabel=label(speech,String.format(Locale.ROOT,"语速：%.1f 倍",VoiceSettings.rate(this)),16,Color.DKGRAY);
+        SeekBar rate=new SeekBar(this);rate.setMax(15);rate.setProgress(Math.round((VoiceSettings.rate(this)-.5f)*10));speech.addView(rate);
+        rate.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener(){
+            public void onProgressChanged(SeekBar bar,int progress,boolean user){if(user){float value=.5f+progress/10f;VoiceSettings.save(MainActivity.this,value);rateLabel.setText(String.format(Locale.ROOT,"语速：%.1f 倍",value));}}
+            public void onStartTrackingTouch(SeekBar bar){}public void onStopTrackingTouch(SeekBar bar){}
+        });
+        label(speech,"0.5—2.0 倍，下一条播报生效，后台播报使用同一设置。",12,Color.DKGRAY);
+        button(speech,"中文语音试听",()->{if(idle())say("凌跑助手语音试听。新的打卡信息会按照这个语速播报。","TEST",null);});
+        button(speech,"恢复默认语速",()->{VoiceSettings.save(this,1f);rate.setProgress(5);rateLabel.setText("语速：1.0 倍");});
+        button(speech,"系统语音引擎设置",()->{if(idle())try{startActivity(new Intent("com.android.settings.TTS_SETTINGS"));}catch(Exception e){toast("请在系统设置中查找文字转语音。");}});
+        LinearLayout basic=card(testPanel);label(basic,"使用与权限",19,Color.rgb(16,48,55));
+        button(basic,"使用指南",this::showUsageGuide);button(basic,"后台运行设置",()->{if(idle())backgroundSetup.show();});
+        label(basic,"开始实跑监测会自动启用已授权的定位与计步；首次请求系统权限。拒绝、GPS关闭或缺少传感器时，仍可按打卡间隔估算。停止监测后停止采样。",13,Color.DKGRAY);
+        button(basic,"定位 / 身体活动权限设置",()->{if(idle())try{startActivity(new Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,Uri.parse("package:"+getPackageName())));}catch(Exception e){toast("请到系统应用管理中设置权限。");}});
+        LinearLayout help=card(testPanel);label(help,"问题反馈",19,Color.rgb(16,48,55));
+        label(help,"遇到问题可导出本机报告，私下发给维护者。导出会停止监测；不会自动上传。",13,Color.DKGRAY);
+        button(help,"导出本次问题报告",()->exportReport(false));button(help,"导出最近保存的报告",()->exportReport(true));
+        label(help,"版本 "+VERSION+" · 测试版",12,Color.DKGRAY);
+    }
+    private boolean prepareMotionPermissions(String selected){
+        if(permissionRequestInFlight)return true;
+        SharedPreferences prefs=getSharedPreferences("motion-permissions",MODE_PRIVATE);
+        ArrayList<String> permissions=new ArrayList<>();
+        boolean askLocation=MotionPermissionPlan.location(motion.locationPermission(),prefs.getBoolean("locationAsked",false));
+        boolean askSteps=MotionPermissionPlan.steps(Build.VERSION.SDK_INT,motion.stepPermission(),prefs.getBoolean("stepsAsked",false));
+        if(askLocation){permissions.add(Manifest.permission.ACCESS_COARSE_LOCATION);permissions.add(Manifest.permission.ACCESS_FINE_LOCATION);}
+        if(askSteps)permissions.add(Manifest.permission.ACTIVITY_RECOGNITION);
+        locationWanted=true;stepsWanted=true;
+        if(permissions.isEmpty())return false;
+        permissionContinuation=selected;permissionRequestInFlight=true;
+        status("开始监测会使用定位与计步辅助。未授权时仍可按打卡间隔估算。");
+        try{requestPermissions(permissions.toArray(new String[0]),404);
+            SharedPreferences.Editor edit=prefs.edit();if(askLocation)edit.putBoolean("locationAsked",true);if(askSteps)edit.putBoolean("stepsAsked",true);edit.apply();
+        }catch(Exception e){permissionRequestInFlight=false;permissionContinuation=null;toast("系统权限请求不可用，将按已获得的权限继续监测。");return false;}
+        return true;
+    }
+    private void openSchoolHome(){
+        if(!idle())return;
+        if(!pageNavigation.begin(SystemClock.elapsedRealtime())){toast("网页正在加载，请稍候；长时间无响应可点“恢复网页”。");return;}
+        loaded=true;web.stopLoading();observedClear();web.loadUrl(BrowserPolicy.ENTRY);status("正在打开学校首页……");
+    }
+    private void recoverSchoolWeb(){
+        if(!idle())return;
+        new AlertDialog.Builder(this).setTitle("恢复学校网页").setMessage("重新建立网页窗口，不清除学校登录Cookie或本地报告；会话是否仍有效由学校判断。")
+            .setPositiveButton("恢复",(d,w)->{rebuildWeb();show("学校网页");})
+            .setNegativeButton("取消",null).show();
+    }
+    private void rebuildWeb(){
+        WebView old=web;web=null;
+        if(old!=null){webPanel.removeView(old);old.setWebViewClient(new WebViewClient());try{old.stopLoading();}catch(Exception ignored){}old.destroy();}
+        pageNavigation.reset();observedClear();pageOrigin="";loaded=false;
+        web=new WebView(this);webPanel.addView(web,new LinearLayout.LayoutParams(-1,0,1));web.setVisibility(View.GONE);configureWeb();
+    }
     private void makeSimulationControls(){
         LinearLayout lab=card(testPanel);label(lab,"模拟校园平台 · 原地专项测试",20,Color.rgb(148,72,0));label(lab,"本机模拟数据，不登录、不连接学校。经过同一个后台监测、判断和语音流程；不能替代真实芯片与学校网络验收。",13,Color.DKGRAY);
         simulationText=label(lab,"初始2800米（7圈），每60秒自动发布下一段200米。",14,Color.DKGRAY);
@@ -138,7 +199,7 @@ public final class MainActivity extends Activity {
         button(lab,"停止模拟 / 当前监测",()->stop("USER_STOP","用户停止监测。"));
         button(lab,"查看模拟平台当前数据",()->dialog("模拟平台发布数据",localPlatform==null?"请先开始模拟测试。":localPlatform.state(SystemClock.elapsedRealtime()).toString()));
     }
-    private void publishSimulation(String action){if(!RunService.running()||report==null||!report.optBoolean("simulated")){toast("请先启动模拟测试；不会向学校发布数据。");return;}RunService.labPublish(action);toast("已提交模拟更新，下一次轮询读取。连续手动打卡过快时仅更新距离，不用于速度估算。");}
+    private void publishSimulation(String action){if(!ClientBuild.DEVELOPER_TOOLS)return;if(!RunService.running()||report==null||!report.optBoolean("simulated")){toast("请先启动模拟测试；不会向学校发布数据。");return;}RunService.labPublish(action);toast("已提交模拟更新，下一次轮询读取。连续手动打卡过快时仅更新距离，不用于速度估算。");}
     private void startSimulation(long duration,boolean gap,boolean reuse){
         startSimulation(duration,gap,reuse,60000);
     }
@@ -155,7 +216,7 @@ public final class MainActivity extends Activity {
             prefs.edit().putString("intervalSeconds",String.valueOf(intervalSeconds)).putString("durationSeconds",String.valueOf(durationSeconds)).putBoolean("gap",gapInput.isChecked()).apply();dialog.dismiss();startSimulation(durationSeconds*1000,gapInput.isChecked(),false,intervalSeconds*1000);
         }));dialog.show();
     }
-    private void startSimulation(long duration,boolean gap,boolean reuse,long interval){
+    private void startSimulation(long duration,boolean gap,boolean reuse,long interval){if(!ClientBuild.DEVELOPER_TOOLS)return;
         if(!idle())return;if(backgroundSetup.beforeStart(()->startSimulation(duration,gap,reuse,interval)))return;
         if(reuse&&localPlatform==null){toast("请先运行一次模拟测试。");return;}if(reuse&&localPlatform.state(SystemClock.elapsedRealtime()).optBoolean("ended")){toast("这条模拟记录已结束，请开始一轮新的5分钟或20分钟测试。");return;}period=reuse?localPlatform.period:periods.getCheckedRadioButtonId()==101?"amDel":"pmDel";
         if(!reuse)localPlatform=new LabPlatform(SystemClock.elapsedRealtime(),System.currentTimeMillis(),duration,gap,period,interval);
@@ -169,11 +230,11 @@ public final class MainActivity extends Activity {
         web.setWebChromeClient(new WebChromeClient());
         web.setWebViewClient(new WebViewClient(){
             @Override public boolean shouldOverrideUrlLoading(WebView v,WebResourceRequest r){if(!r.isForMainFrame())return false;boolean allow=BrowserPolicy.allowNavigation(r.getUrl().toString());if(!allow)toast("此测试版只打开学校域名网页。");return !allow;}
-            @Override public void onPageStarted(WebView v,String url,android.graphics.Bitmap icon){pageOrigin=BrowserPolicy.origin(url);observedClear();if(active)stop("NAVIGATION","网页已跳转，监测停止。");}
-            @Override public void onPageFinished(WebView v,String url){updateSchoolGuide();if(!active&&!RunService.running())status(BrowserPolicy.exercise(url)?"已到健身长跑，点上方“返回监测”。":"登录后，还需在学校首页点“健身长跑”。");}
+            @Override public void onPageStarted(WebView v,String url,android.graphics.Bitmap icon){if(v!=web)return;pageNavigation.pageStarted(SystemClock.elapsedRealtime());pageOrigin=BrowserPolicy.origin(url);observedClear();if(active)stop("NAVIGATION","网页已跳转，监测停止。");}
+            @Override public void onPageFinished(WebView v,String url){if(v!=web)return;if(Objects.equals(url,v.getUrl()))pageNavigation.finished();updateSchoolGuide();if(!active&&!RunService.running())status(BrowserPolicy.exercise(url)?"已到健身长跑，点上方“返回监测”。":"登录后，还需在学校首页点“健身长跑”。");}
             @Override public void onReceivedSslError(WebView v,android.webkit.SslErrorHandler h,android.net.http.SslError e){h.cancel();if(active)stop("TLS_ERROR","证书校验失败，已停止。");else status("学校连接证书校验失败。");}
             @Override public WebResourceResponse shouldInterceptRequest(WebView v,WebResourceRequest request){observe(request);return null;}
-            @Override public boolean onRenderProcessGone(WebView v,RenderProcessGoneDetail d){if(!RunService.running())stop("WEBVIEW_EXIT","网页进程已退出；已重建登录窗口，请重新进入学校网页。");webPanel.removeView(v);v.destroy();web=new WebView(MainActivity.this);webPanel.addView(web,new LinearLayout.LayoutParams(-1,0,1));web.setVisibility(View.GONE);configureWeb();loaded=false;show("监测");return true;}
+            @Override public boolean onRenderProcessGone(WebView v,RenderProcessGoneDetail d){if(!RunService.running())stop("WEBVIEW_EXIT","网页进程已退出；已重建登录窗口，请重新进入学校网页。");if(v==web){rebuildWeb();show("监测");}return true;}
         });
     }
     private synchronized void observedClear(){observed.clear();observedAuth.clear();RunService.clearAuthEvidence();}
@@ -194,10 +255,12 @@ public final class MainActivity extends Activity {
         });}catch(Exception e){stop("WEBVIEW_ERROR","当前WebView无法执行脚本。");}
     }
     private void begin(String selected){
+        if(!ClientBuild.DEVELOPER_TOOLS&&!selected.equals("RUN"))return;
         if(!idle())return;if(!BrowserPolicy.exercise(web.getUrl())){toast("还差一步：登录后请点学校首页的“健身长跑”，再点上方“返回监测”。");show("学校网页");return;}if(!selected.equals("SINGLE")&&!voiceReady){toast("中文语音引擎未就绪，请先进行中文试听或配置系统语音。");return;}
         if((selected.equals("RUN")||selected.equals("BACKGROUND_CHECK"))&&backgroundSetup.beforeStart(()->begin(selected)))return;
+        if(selected.equals("RUN")&&prepareMotionPermissions(selected))return;
         cancelVoice();generation++;work.removeCallbacksAndMessages(null);mode=selected;period=periods.getCheckedRadioButtonId()==102?"pmDel":"amDel";round=0;lastMessage="";newReport(mode);if(ioFailed)return;active=true;periods.setEnabled(false);tester.setEnabled(false);getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-        motion.stop();if(locationWanted)motion.enableGps();if(stepsWanted)motion.enableSteps();show(selected.equals("RUN")?"监测":"测试与报告");status("正在准备，请稍候……");
+        motion.stop();if(!selected.equals("RUN")){if(locationWanted)motion.enableGps();if(stepsWanted)motion.enableSteps();}show(selected.equals("RUN")?"监测":"测试与报告");status("正在准备，请稍候……");
         eval(assetsBundle+";window.__appPolicy=window.__trackPolicy.create();window.__appPrevious=null;window.__appPreviousAt=0;return {checks:window.__exerciseApiSelfCheck()};",data->{
             JSONArray checks=data.optJSONArray("checks");boolean ok=checks!=null&&checks.length()>0;for(int i=0;ok&&i<checks.length();i++)ok="PASS".equals(checks.optJSONObject(i).optString("status"));event("preflight",obj("passed",ok,"source","SIMULATED"));if(!ok){stop("SELF_CHECK","离线自检未通过。");return;}
             if(mode.equals("SINGLE")){query();return;}say("这是凌跑助手中文试听。当前是测试版本，请确认能听清。","TEST",()->askHeard("试听",()->{if(active)query();}));
@@ -211,7 +274,7 @@ public final class MainActivity extends Activity {
     private void handoffNative(){
         eval(evidence()+"return window.__exerciseApiTest.takeNativeSession("+JSONObject.quote(period)+");",result->{
             if(!foregroundVisible){stop("START_NOT_VISIBLE","请在应用前台开始后台监测。");return;}
-            if(!result.optBoolean("ok")||result.optJSONObject("privateSession")==null){event("sessionHandoff",obj("ok",false,"diagnostics",result.optJSONObject("diagnostics")));stop("NATIVE_SESSION","本轮尚未开始：会话识别依据不足。请点“刷新学校页并更新会话”，网页加载完成后再开始；不必反复退出登录。");return;}
+            if(!result.optBoolean("ok")||result.optJSONObject("privateSession")==null){event("sessionHandoff",obj("ok",false,"diagnostics",result.optJSONObject("diagnostics")));stop("NATIVE_SESSION","本轮尚未开始：会话识别依据不足。请点学校网页的“学校首页”，重新进入健身长跑，网页加载完成后再开始；不必反复退出登录。");return;}
             try{RunService.Start s=new RunService.Start();s.session=new NativeApi.Session(result.getJSONObject("privateSession"));s.report=report;s.file=reportFile;s.gps=locationWanted;s.steps=stepsWanted;s.check=mode.equals("BACKGROUND_CHECK");
                 backgroundReportId=report.optString("reportId");active=false;generation++;work.removeCallbacksAndMessages(null);cancelVoice();motion.stop();getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);periods.setEnabled(true);tester.setEnabled(true);
                 RunService.launch(this,s);watchBackground=true;reportFile=null;status("正在启动常驻通知与后台查询，请等提示后再切后台。");
@@ -254,7 +317,7 @@ public final class MainActivity extends Activity {
         if(message==null||message.isEmpty()){if(done!=null)done.run();return;}if(kind.equals("RESULT"))lastMessage=message;
         if(voiceBusy){pendingMessage=message;pendingVoiceDone=done;return;}voiceBusy=true;String id="voice-"+(++voiceSerial);int gen=generation;JSONObject e=obj("kind",kind,"text",message,"state","REQUESTED","requested",stamp());voiceEntries.put(id,e);event("speech",e);
         voiceDone.put(id,()->{if(gen!=generation)return;voiceBusy=false;if(done!=null)done.run();if(pendingMessage!=null){String next=pendingMessage;Runnable cb=pendingVoiceDone;pendingMessage=null;pendingVoiceDone=null;say(next,"QUEUED",cb);}});
-        int code=tts.speak(message,TextToSpeech.QUEUE_FLUSH,null,id);if(code!=TextToSpeech.SUCCESS){voiceComplete(id,false);return;}main.postDelayed(()->{if(gen==generation&&voiceDone.containsKey(id))voiceComplete(id,false);},25000);
+        tts.setSpeechRate(VoiceSettings.rate(this));int code=tts.speak(message,TextToSpeech.QUEUE_FLUSH,null,id);if(code!=TextToSpeech.SUCCESS){voiceComplete(id,false);return;}main.postDelayed(()->{if(gen==generation&&voiceDone.containsKey(id))voiceComplete(id,false);},RatePolicy.timeout(VoiceSettings.rate(this)));
     }
     private void voiceComplete(String id,boolean ok){JSONObject e=voiceEntries.remove(id);Runnable cb=voiceDone.remove(id);if(e==null||cb==null)return;put(e,"state",ok?"DONE":"ERROR");put(e,"finished",stamp());save();if(!ok){voiceBusy=false;stop("TTS_ERROR","语音播放失败或超时，已停止。");return;}cb.run();}
     private void cancelVoice(){if(tts!=null)tts.stop();for(JSONObject e:voiceEntries.values())put(e,"state","CANCELLED");voiceEntries.clear();voiceDone.clear();voiceBusy=false;pendingMessage=null;pendingVoiceDone=null;}
@@ -276,7 +339,7 @@ public final class MainActivity extends Activity {
     }
     private void enableLocation(){if(!idle())return;if(!motion.locationPermission()){requestPermissions(new String[]{Manifest.permission.ACCESS_COARSE_LOCATION,Manifest.permission.ACCESS_FINE_LOCATION},401);return;}locationWanted=true;status(motion.enableGps());}
     private void enableSteps(){if(!idle())return;if(!motion.stepPermission()){requestPermissions(new String[]{Manifest.permission.ACTIVITY_RECOGNITION},402);return;}stepsWanted=true;status(motion.enableSteps());}
-    @Override public void onRequestPermissionsResult(int request,String[] names,int[] granted){super.onRequestPermissionsResult(request,names,granted);if(backgroundSetup.onPermissionsResult(request)){backgroundStatus.setText(backgroundSetup.summary());return;}if(request==401){locationWanted=motion.locationPermission();status(locationWanted?motion.enableGps():"未获精确定位权限；可不启用定位继续测试。");}else if(request==402){stepsWanted=motion.stepPermission();status(stepsWanted?motion.enableSteps():"身体活动权限未获准；按打卡间隔估算仍可用。");}else if(request==403)status("通知权限设置完成，请再次点击开始；通知被拒绝时需回到应用停止任务。");}
+    @Override public void onRequestPermissionsResult(int request,String[] names,int[] granted){super.onRequestPermissionsResult(request,names,granted);if(request==404){permissionRequestInFlight=false;String selected=permissionContinuation;permissionContinuation=null;if(selected!=null)main.post(()->{if(!isFinishing()&&!isDestroyed())begin(selected);});return;}if(backgroundSetup.onPermissionsResult(request)){backgroundStatus.setText(backgroundSetup.summary());return;}if(request==401){locationWanted=motion.locationPermission();status(locationWanted?motion.enableGps():"未获精确定位权限；可不启用定位继续测试。");}else if(request==402){stepsWanted=motion.stepPermission();status(stepsWanted?motion.enableSteps():"身体活动权限未获准；按打卡间隔估算仍可用。");}else if(request==403)status("通知权限设置完成，请再次点击开始；通知被拒绝时需回到应用停止任务。");}
     private void offline(){
         if(!idle())return;newReport("OFFLINE_SIMULATION");if(ioFailed)return;auxiliaryBusy=true;status("离线模拟中，不请求学校……");final int gen=++generation;WebView isolated=new WebView(this);isolated.getSettings().setJavaScriptEnabled(true);isolated.getSettings().setBlockNetworkLoads(true);isolated.getSettings().setAllowFileAccess(false);isolated.getSettings().setAllowContentAccess(false);
         final boolean[] complete={false};main.postDelayed(()->{if(!complete[0]){complete[0]=true;isolated.destroy();if(gen==generation)stop("OFFLINE_TIMEOUT","离线模拟未响应。");}},10000);
