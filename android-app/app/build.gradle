@@ -2,7 +2,7 @@ plugins { id 'com.android.application' }
 android {
     namespace 'cn.trackcheck.beta'
     compileSdk 35
-    defaultConfig { applicationId 'cn.trackcheck.beta'; minSdk 26; targetSdk 35; versionCode 11; versionName '0.4.5-beta.1' }
+    defaultConfig { applicationId 'cn.trackcheck.beta'; minSdk 26; targetSdk 35; versionCode 12; versionName '0.4.6-beta.1' }
     compileOptions { sourceCompatibility JavaVersion.VERSION_1_8; targetCompatibility JavaVersion.VERSION_1_8 }
     buildTypes { release { minifyEnabled false } }
 }

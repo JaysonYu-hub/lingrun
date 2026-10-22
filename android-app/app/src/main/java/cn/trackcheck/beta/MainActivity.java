@@ -19,7 +19,7 @@ import java.security.MessageDigest;
 import java.util.*;
 
 public final class MainActivity extends Activity {
-    private static final String VERSION="0.4.5-beta.1";
+    private static final String VERSION="0.4.6-beta.1";
     private final Handler main=new Handler(Looper.getMainLooper());
     private final Handler work=new Handler(Looper.getMainLooper());
     private LinearLayout root,monitorPanel,testPanel,webPanel;
@@ -263,7 +263,7 @@ public final class MainActivity extends Activity {
         motion.stop();if(!selected.equals("RUN")){if(locationWanted)motion.enableGps();if(stepsWanted)motion.enableSteps();}show(selected.equals("RUN")?"监测":"测试与报告");status("正在准备，请稍候……");
         eval(assetsBundle+";window.__appPolicy=window.__trackPolicy.create();window.__appPrevious=null;window.__appPreviousAt=0;return {checks:window.__exerciseApiSelfCheck()};",data->{
             JSONArray checks=data.optJSONArray("checks");boolean ok=checks!=null&&checks.length()>0;for(int i=0;ok&&i<checks.length();i++)ok="PASS".equals(checks.optJSONObject(i).optString("status"));event("preflight",obj("passed",ok,"source","SIMULATED"));if(!ok){stop("SELF_CHECK","离线自检未通过。");return;}
-            if(mode.equals("SINGLE")){query();return;}say("这是凌跑助手中文试听。当前是测试版本，请确认能听清。","TEST",()->askHeard("试听",()->{if(active)query();}));
+            if(mode.equals("SINGLE")||!VoiceSettings.needsAudition(this,mode)){query();return;}say("这是凌跑助手中文试听。当前是测试版本，请确认能听清。","TEST",()->askHeard("试听",()->{if(active)query();}));
         });
     }
     private void query(){
@@ -311,7 +311,7 @@ public final class MainActivity extends Activity {
     private void finishFive(){
         eval("window.__exerciseApiTest.stop();return {stopped:!window.__exerciseApiTest.state.busy};",o->{event("autoStop",obj("passed",o.optBoolean("stopped"),"queries",round));if(!o.optBoolean("stopped")){stop("STOP_ERROR","停止检查未通过。");return;}askHeard("真实结果",()->stop("FIVE_DONE","五轮验收完成，请查看报告；运动中的准确性仍待核验。"));});
     }
-    private void askHeard(String kind,Runnable done){int gen=generation;new AlertDialog.Builder(this).setTitle("是否听到"+kind+"？").setMessage(kind.equals("试听")?"请根据实际声音确认，系统播放完成回调不代表人耳听到。":"包括等待起跑等结果提示；没有变化时后续轮次可以静默。").setCancelable(false).setPositiveButton("听到了",(d,w)->{if(gen!=generation)return;event("hearing",obj("kind",kind,"heard",true,"source","USER"));done.run();}).setNegativeButton("没听到",(d,w)->{if(gen!=generation)return;event("hearing",obj("kind",kind,"heard",false,"source","USER"));stop("VOICE_NOT_HEARD","实际听感未通过，请检查音量、输出设备和语音引擎。");}).show();}
+    private void askHeard(String kind,Runnable done){int gen=generation;new AlertDialog.Builder(this).setTitle("是否听到"+kind+"？").setMessage(kind.equals("试听")?"请根据实际声音确认，系统播放完成回调不代表人耳听到。":"包括等待起跑等结果提示；没有变化时后续轮次可以静默。").setCancelable(false).setPositiveButton("听到了",(d,w)->{if(gen!=generation)return;event("hearing",obj("kind",kind,"heard",true,"source","USER"));if(kind.equals("试听"))VoiceSettings.confirmAudition(this);done.run();}).setNegativeButton("没听到",(d,w)->{if(gen!=generation)return;event("hearing",obj("kind",kind,"heard",false,"source","USER"));stop("VOICE_NOT_HEARD","实际听感未通过，请检查音量、输出设备和语音引擎。");}).show();}
     private void say(String message,String kind,Runnable done){
         if(!voiceReady){if(active)stop("TTS_NOT_READY","中文语音引擎未就绪。");else toast("中文语音引擎未就绪。");return;}
         if(message==null||message.isEmpty()){if(done!=null)done.run();return;}if(kind.equals("RESULT"))lastMessage=message;

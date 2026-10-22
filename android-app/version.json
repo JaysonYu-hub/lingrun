@@ -1,6 +1,6 @@
 {
-  "versionName": "0.4.5-beta.1",
-  "versionCode": 11,
+  "versionName": "0.4.6-beta.1",
+  "versionCode": 12,
   "channel": "beta",
   "applicationId": "cn.trackcheck.beta",
   "minAndroidApi": 26,
