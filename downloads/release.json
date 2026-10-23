@@ -1,25 +1,25 @@
 {
   "schema": 1,
   "applicationId": "cn.trackcheck.beta",
-  "versionName": "0.4.5-beta.1",
-  "versionCode": 11,
+  "versionName": "0.4.7-beta.1",
+  "versionCode": 13,
   "channel": "beta",
-  "fileName": "LingRun-0.4.5-beta.1.apk",
+  "fileName": "LingRun-0.4.7-beta.1.apk",
   "bytes": 115382,
-  "sha256": "a8124ffecd709b711bc66164a2cb0e9836e1cc3e6ae4b99d034215cfc21ee691",
+  "sha256": "b18af8ab8f8440cc4d954c679475b7c27ec26e6025a3a6f601543aa81e9a1f79",
   "signerCertificateSha256": "85b439ac9c1dc4215a59a3cbff6ecfe6937328acfc855a9a83193a803a7ba841",
   "minAndroidApi": 26,
   "targetAndroidApi": 35,
-  "realDeviceStatus": "PENDING",
+  "realDeviceStatus": "USER_REPORTED_PASS",
   "releaseStage": "public-beta",
   "baselineValidation": {
-    "version": "0.2.1-beta.1",
+    "version": "0.4.7-beta.1",
     "source": "user-reported",
-    "date": "2026-09-29",
-    "summary": "用户反馈本轮测试没有问题；未收到覆盖全部机型的验收数据"
+    "date": "2026-10-23",
+    "summary": "维护者反馈本轮测试未发现问题；未收到覆盖全部机型的验收数据"
   },
   "foregroundOnly": false,
   "backgroundExperimental": true,
   "distribution": "github-release",
-  "generatedAt": "2026-10-16T06:52:02.565Z"
+  "generatedAt": "2026-10-23T13:05:34.880810+00:00"
 }

@@ -1,18 +1,20 @@
 # 凌跑助手
 
-面向 Android 的跑步监测助手，当前为 **0.4.5-beta.1 内测版**，不是学校官方应用。
+面向 Android 的跑步监测助手，当前为 **0.4.7-beta.1 内测版**，不是学校官方应用。
 
 ## 下载与使用
 
-- [版本发布页与 APK 下载](https://github.com/JaysonYu-hub/lingrun/releases/tag/v0.4.5-beta.1)
-- [直接下载 APK](https://github.com/JaysonYu-hub/lingrun/releases/download/v0.4.5-beta.1/LingRun-0.4.5-beta.1.apk)
+- [版本发布页与 APK 下载](https://github.com/JaysonYu-hub/lingrun/releases/tag/v0.4.7-beta.1)
+- [直接下载 APK](https://github.com/JaysonYu-hub/lingrun/releases/download/v0.4.7-beta.1/LingRun-0.4.7-beta.1.apk)
 - [首次使用指南](android-app/新手快速开始.md)
 - [使用说明](android-app/内测版使用说明.md)
 - [更新记录](android-app/CHANGELOG.md)
 
 已有版本请直接覆盖安装，不要先卸载。打开 App，完成学校/VPN 登录，进入学校首页的“健身长跑”，再点“返回监测”。
 
-安装包 SHA-256：`a8124ffecd709b711bc66164a2cb0e9836e1cc3e6ae4b99d034215cfc21ee691`。版本与签名证书信息见 [release.json](downloads/release.json)。
+安装包 SHA-256：`b18af8ab8f8440cc4d954c679475b7c27ec26e6025a3a6f601543aa81e9a1f79`。版本与签名证书信息见 [release.json](downloads/release.json)。
+
+本版支持在监测页选择 **100米间距四点 / 200米间距两点**，均按400米一圈计算；布局会保存在本机。首次试听确认后不再重复启动试听。维护者反馈本轮测试未发现问题，其他设备仍需验证。
 
 ## 主要功能
 
