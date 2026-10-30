@@ -1,0 +1,43 @@
+name: LingRun
+options:
+  bundleIdPrefix: cn.lingrun
+  deploymentTarget:
+    iOS: '16.0'
+settings:
+  base:
+    SWIFT_VERSION: '5.9'
+    CODE_SIGN_STYLE: Automatic
+    MARKETING_VERSION: 0.1.0
+    CURRENT_PROJECT_VERSION: 1
+targets:
+  LingRun:
+    type: application
+    platform: iOS
+    sources: [Sources, Resources]
+    info:
+      path: Config/Info.plist
+      properties:
+        CFBundleDisplayName: 凌跑助手
+        UILaunchScreen: {}
+        NSLocationWhenInUseUsageDescription: 在你开启运动定位辅助后，用于估算移动距离；定位不能确认学校打卡。
+        NSMotionUsageDescription: 在你开启计步辅助后，读取本次运动的步数与步频，仅辅助估算移动，不确认学校打卡。
+        UIBackgroundModes: [audio, location]
+        NSAppTransportSecurity:
+          NSAllowsArbitraryLoads: false
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: cn.lingrun.ios.beta
+        TARGETED_DEVICE_FAMILY: '1,2'
+  LingRunTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources: [Tests]
+    dependencies:
+      - target: LingRun
+schemes:
+  LingRun:
+    build:
+      targets:
+        LingRun: all
+    test:
+      targets: [LingRunTests]

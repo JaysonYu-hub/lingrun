@@ -1,0 +1,10 @@
+*.xcodeproj/
+DerivedData/
+Config/Info.plist
+*.xcuserstate
+.DS_Store
+
+TestResults/
+*.xcresult/
+*.ipa
+*.mobileprovision
